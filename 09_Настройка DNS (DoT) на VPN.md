@@ -126,8 +126,9 @@ resolvectl status
 ```
 
 > \[!TIP]
-> Если появилась ошибка `unknown interface`, читайте подробное руководство:
-
+> Если появилась ошибка `unknown interface`, читайте: <br>
+> Ошибка при настройке **DNS over TLS (DoT)**: <br>
+> 👉 [ERROR DoT](https://github.com/r00t-man/MZT/blob/main/11_DNS%20(DoT)%20-%20%D0%92%D0%BE%D0%B7%D0%BC%D0%BE%D0%B6%D0%BD%D0%B0%20%D0%BE%D1%88%D0%B8%D0%B1%D0%BA%D0%B0.md)
 
 ## 🛠 Настройка systemd-resolved
 
