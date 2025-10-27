@@ -85,6 +85,8 @@ tc qdisc add dev eth0 root netem delay 100ms loss 5% reorder 2%
 > chmod +x /usr/local/bin/netem-advanced.sh
 > ```
 
+## Интерфейс enp0s7 - замените на свой в скрипте ниже
+
 ```bash
 #!/usr/bin/env bash
 # netem-advanced.sh — устойчивый шейпер с дружелюбным восстановлением qdisc
