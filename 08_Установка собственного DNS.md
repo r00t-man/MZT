@@ -107,6 +107,11 @@ certbot certonly --standalone -d vash-domen.ru
 
 ![dns](https://github.com/soulpastwk/share/raw/main/media/vpn00/dns-04.png)
 
+> [!IMPORTANT]
+> ## Пока можно оставить, но потом снять !!! <br>
+> ## ⚠️⚠️⚠️ **Снять галочку с `Включить незашифрованный DNS`** ⚠️⚠️⚠️ <br>
+> ## НО в дальнейшем надо настроить сервера на DoH и DoT <br>
+
 ![dns](https://github.com/soulpastwk/share/raw/main/media/vpn00/dns-05.png)
 
 ![dns](https://github.com/soulpastwk/share/raw/main/media/vpn00/dns-06.png)
