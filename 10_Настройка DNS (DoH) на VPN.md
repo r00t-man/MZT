@@ -110,6 +110,53 @@ stamp = 'sdns://BfeAAAADDSASWAANd1tsZG4sLnJ1OjG0MwovDG5vLXF1TDJ3'
 * `fallback_resolvers` нужны, чтобы получить IP твоего домена **до установления DoH-сессии**.
 * `stamp` — это "подпись" DNS-сервера (генерируется вручную, см. ниже).
 
+💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡
+## Вот вам рабочий конфиг на DoH AdGuard официальный:💡
+💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡
+```bash
+nano /etc/dnscrypt-proxy/dnscrypt-proxy.toml
+```
+
+```toml
+listen_addresses = ['127.0.0.1:5353']
+
+# Версия: stable-2025.10.25-gisoman
+
+## nscrypt-proxy слушает только на localhost:5353, а не на 53 порту.
+## Это важно, чтобы не конфликтовать с systemd-resolved.
+
+# Логи
+log_file = '/var/log/dnscrypt-proxy/dnscrypt-proxy.log'
+log_level = 2
+
+# Разрешаем только DoH
+ipv4_servers = true
+ipv6_servers = false
+dnscrypt_servers = false
+doh_servers = true
+
+# Подключаешься только к DoH-серверам (DNS-over-HTTPS), не к старым DNSCrypt.
+# Это современный и более совместимый способ шифрования DNS.
+
+# Минимальные требования
+require_dnssec = false
+require_nolog = false
+require_nofilter = false
+
+# Не требуешь обязательного DNSSEC, отсутствия логов или фильтрации.
+# Гибкий подход: мы не блокируем серверы из-за одного параметра, но доверяем нашему DNS vashdnsdomen.
+
+# Серверы вручную
+
+server_names = ['dns.adguard-dns']
+
+fallback_resolvers = ['1.1.1.1:53', '8.8.8.8:53']
+
+[static.'dns.adguard-dns']
+stamp = 'sdns://AgcAAAAAAAAAAAAXZG5zLmFkZ3VhcmQtZG5zLmNvbTo0NDMKL2Rucy1xdWVyeQ'
+```
+💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡💡
+
 ---
 
 ## 🧾 **5. Генерация DNS Stamp**
