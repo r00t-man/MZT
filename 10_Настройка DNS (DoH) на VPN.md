@@ -177,6 +177,10 @@ stamp = 'sdns://AgcAAAAAAAAAAAAXZG5zLmFkZ3VhcmQtZG5zLmNvbTo0NDMKL2Rucy1xdWVyeQ'
 
 Файл: `/usr/lib/systemd/system/dnscrypt-proxy.service`
 
+```bash
+nano /usr/lib/systemd/system/dnscrypt-proxy.service
+```
+
 ```ini
 [Unit]
 Description=DNSCrypt client proxy
@@ -214,6 +218,10 @@ WantedBy=multi-user.target
 ## 🧠 **7. Настройка systemd-resolved**
 
 Файл: `/etc/systemd/resolved.conf`
+
+```bash
+nano /etc/systemd/resolved.conf
+```
 
 ```ini
 [Resolve]
@@ -258,6 +266,10 @@ LLMNR=no
 ## 🧱 **8. Настройка resolv.conf**
 
 Файл: `/etc/resolv.conf`
+
+```bash
+nano /etc/resolv.conf
+```
 
 ```ini
 nameserver 127.0.0.53
