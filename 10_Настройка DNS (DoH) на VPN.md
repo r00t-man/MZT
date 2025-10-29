@@ -211,24 +211,7 @@ WantedBy=multi-user.target
 
 ---
 
-## 🚀 **7. Запуск и проверка службы**
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable dnscrypt-proxy
-sudo systemctl start dnscrypt-proxy
-sudo systemctl status dnscrypt-proxy
-```
-
-Посмотреть логи:
-
-```bash
-tail -f /var/log/dnscrypt-proxy/dnscrypt-proxy.log
-```
-
----
-
-## 🧠 **8. Настройка systemd-resolved**
+## 🧠 **7. Настройка systemd-resolved**
 
 Файл: `/etc/systemd/resolved.conf`
 
@@ -272,7 +255,7 @@ LLMNR=no
 
 ---
 
-## 🧱 **9. Настройка resolv.conf**
+## 🧱 **8. Настройка resolv.conf**
 
 Файл: `/etc/resolv.conf`
 
@@ -311,6 +294,23 @@ search .
 
 ```bash
 sudo systemctl restart systemd-resolved
+```
+
+---
+
+## 🚀 **9. Запуск и проверка службы**
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable dnscrypt-proxy
+sudo systemctl start dnscrypt-proxy
+sudo systemctl status dnscrypt-proxy
+```
+
+Посмотреть логи:
+
+```bash
+tail -f /var/log/dnscrypt-proxy/dnscrypt-proxy.log
 ```
 
 ---
