@@ -444,5 +444,5 @@ resolvectl query google.com
 утечек ДНС быть не должно
 
 ```
-dsnleaktest.com
+dnsleaktest.com
 ```
