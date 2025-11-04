@@ -5,7 +5,6 @@
 [![Xray](https://img.shields.io/badge/Xray-Ready-orange?logo=github)](https://github.com/XTLS/Xray-core)
 [![License](https://img.shields.io/badge/License-MIT-purple)](LICENSE)
 
-====== ↑ ↑ ↑ Кликабельные штуки ↑ ↑ ↑ ======
 > [!IMPORTANT]
 > Этот проект предназначен только для **личного использования**.  
 > ⚠️ **Дисклеймер** ⚠️  
