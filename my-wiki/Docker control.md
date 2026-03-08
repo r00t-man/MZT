@@ -1,4 +1,4 @@
-# 🐳 Control Docker CLI v5.2
+# 🐳 Control Docker CLI v5.2 
 
 Интерактивный CLI-инструмент для удобного управления Docker прямо из терминала.
 
