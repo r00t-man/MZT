@@ -613,9 +613,9 @@ show_menu() {
   clear
   cat <<'EOF'
 ╔══════════════════════════════════════════════════════╗
-║                SOCKS5 Dante Manager                 ║
-║                 Main user: gisproxy                 ║
-║              Random secret-like passwords           ║
+║                SOCKS5 Dante Manager                  ║
+║                 Main user: gisproxy                  ║
+║                  Вайб кодинг рулит                   ║
 ╚══════════════════════════════════════════════════════╝
 
 1)  Установить / переустановить SOCKS5 (Dante)
