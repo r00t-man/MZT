@@ -1,4 +1,4 @@
-# 🧹 Ultra Clean VPS (Ubuntu 24.04)
+# 🧹 Ultra Clean VPS (Ubuntu 24.04) 
 
 Скрипт для **глубокой очистки VPS на Ubuntu 24.04**.
 
