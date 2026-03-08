@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # =========================================================
-# SOCKS5 Dante Manager
+# SOCKS5 Dante Manager v4
 # Main user: gisproxy
 # Passwords: random hex
 # =========================================================
@@ -13,6 +13,7 @@ BACKUP_FILE="/etc/danted.conf_bak"
 CREDS_FILE="/root/.dante_socks_users"
 SERVICE_NAME="danted"
 DEFAULT_EDITOR="${EDITOR:-nano}"
+CHOSEN_PORT=""
 
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || {
@@ -111,31 +112,51 @@ choose_port() {
   local choice port
 
   while true; do
-    echo "Выберите порт:"
-    echo "1) 8443   (рекомендуется)"
-    echo "2) 9443   (рекомендуется)"
-    echo "3) 1194   (альтернативный)"
-    echo "4) 51820  (альтернативный)"
-    echo "5) Свой порт"
-    echo
-    read -r -p "Выбор [1-5]: " choice
+    clear
+    cat <<EOF
+╔══════════════════════════════════════════════════════╗
+║                  Выбор порта SOCKS5                 ║
+╚══════════════════════════════════════════════════════╝
+
+1) 8443   (рекомендуется)
+2) 9443   (рекомендуется)
+3) 1194   (альтернативный)
+4) 51820  (альтернативный)
+5) Свой порт
+0) Назад
+
+EOF
+
+    read -r -p "Выбор [0-5]: " choice
 
     case "$choice" in
       1) port="8443" ;;
       2) port="9443" ;;
       3) port="1194" ;;
       4) port="51820" ;;
-      5) read -r -p "Введите свой порт: " port ;;
-      *) echo "Неверный выбор."; echo; continue ;;
+      5)
+        read -r -p "Введите свой порт: " port
+        ;;
+      0)
+        CHOSEN_PORT=""
+        return 1
+        ;;
+      *)
+        echo
+        echo "Неверный выбор."
+        sleep 1
+        continue
+        ;;
     esac
 
     if ! validate_port "$port"; then
-      echo "Некорректный порт."
       echo
+      echo "Некорректный порт."
+      sleep 1
       continue
     fi
 
-    echo "$port"
+    CHOSEN_PORT="$port"
     return 0
   done
 }
@@ -347,7 +368,12 @@ install_or_reinstall() {
 
   local port password server listen_status
 
-  port="$(choose_port)"
+  if ! choose_port; then
+    echo "Установка отменена."
+    return 1
+  fi
+
+  port="$CHOSEN_PORT"
 
   if port_in_use "$port"; then
     echo
@@ -506,7 +532,12 @@ change_proxy_port() {
   echo "Текущий порт: ${current_port:-не найден}"
   echo
 
-  new_port="$(choose_port)"
+  if ! choose_port; then
+    echo "Смена порта отменена."
+    return 1
+  fi
+
+  new_port="$CHOSEN_PORT"
 
   if [[ -n "${current_port}" && "${new_port}" == "${current_port}" ]]; then
     echo "Это уже текущий порт."
