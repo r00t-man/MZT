@@ -1,0 +1,151 @@
+# 🧰 MZT — Server Scripts & Guides
+
+[![OS Linux](https://img.shields.io/badge/OS-Linux-blue?logo=linux&logoColor=white)](https://www.linux.org/)
+[![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)](https://www.docker.com/)
+[![Xray](https://img.shields.io/badge/Xray-Ready-orange?logo=github)](https://github.com/XTLS/Xray-core)
+![Platform](https://img.shields.io/badge/platform-Linux-lightgrey?style=flat-square&logo=linux)
+![Tested on](https://img.shields.io/badge/tested%20on-Ubuntu%2024.04%20%7C%20Debian%2012-orange?style=flat-square)
+[![License](https://img.shields.io/badge/License-MIT-purple)](LICENSE)
+
+---
+
+## 📚 О проекте
+
+Этот репозиторий содержит **инструкции, скрипты и заметки по администрированию Linux серверов**.
+
+Основные направления:
+
+- 🖥 администрирование VPS  
+- 🔐 безопасность серверов  
+- 🐳 управление Docker  
+- 📡 прокси и сетевые сервисы  
+- 🧹 обслуживание и очистка серверов  
+
+---
+
+# 🚀 One-Click Install
+
+Некоторые скрипты можно установить **одной командой**.
+
+### 🧹 Ultra Clean VPS
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/Ultra_Clean_VPS.sh)
+````
+
+---
+
+### 🐳 Docker Control CLI
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/control-docker-v5.2-cli.sh)
+```
+
+---
+
+### 🔐 Audit History (логирование команд)
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/audit-history.sh)
+```
+
+---
+
+# 📂 Навигация (Mini Wiki)
+
+> Репозиторий можно использовать как **мини-вики по администрированию Linux серверов**
+
+| Раздел             | Описание                         |
+| ------------------ | -------------------------------- |
+| 📜 Audit History   | Логирование команд пользователей |
+| 🐳 Docker Control  | Управление Docker через CLI      |
+| 📡 MTProto Proxy   | Развёртывание прокси Telegram    |
+| 🧹 Ultra Clean VPS | Очистка и оптимизация сервера    |
+
+---
+
+# 📊 Разделы
+
+## 📜 Audit History
+
+📖 **Логирование всех команд пользователей Linux**
+
+Позволяет:
+
+* вести аудит действий
+* отслеживать изменения
+* повышать безопасность сервера
+
+🔗 Инструкция
+
+[https://github.com/r00t-man/MZT/blob/main/my-wiki/Audit-history.md](https://github.com/r00t-man/MZT/blob/main/my-wiki/Audit-history.md)
+
+---
+
+## 🐳 Docker Control
+
+CLI-скрипт для **быстрого управления Docker контейнерами**.
+
+Функции:
+
+* просмотр контейнеров
+* перезапуск сервисов
+* очистка Docker
+* управление образами
+
+🔗 Инструкция
+
+[https://github.com/r00t-man/MZT/blob/main/my-wiki/Docker%20control.md](https://github.com/r00t-man/MZT/blob/main/my-wiki/Docker%20control.md)
+
+---
+
+## 📡 MTProto Proxy для Telegram
+
+Инструкция по **развёртыванию MTProto Proxy**.
+
+Включает:
+
+* установку прокси
+* генерацию секретов
+* подключение к Telegram
+
+🔗 Инструкция
+
+[https://github.com/r00t-man/MZT/blob/main/my-wiki/MTProxy_TG.md](https://github.com/r00t-man/MZT/blob/main/my-wiki/MTProxy_TG.md)
+
+---
+
+## 🧹 Ultra Clean VPS
+
+Скрипт для **глубокой очистки VPS на Ubuntu / Debian**.
+
+Функции:
+
+* очистка apt
+* удаление старых пакетов
+* освобождение места
+* оптимизация системы
+
+🔗 Инструкция
+
+[https://github.com/r00t-man/MZT/blob/main/my-wiki/Ultra%20Clean%20VPS.md](https://github.com/r00t-man/MZT/blob/main/my-wiki/Ultra%20Clean%20VPS.md)
+
+---
+
+# ⚠️ Дисклеймер
+
+> [!IMPORTANT]
+> Проект предназначен **исключительно для образовательных целей**.
+
+Материалы демонстрируют технические аспекты:
+
+* администрирования серверов
+* настройки сетевых сервисов
+* повышения безопасности
+
+Автор не несёт ответственности за последствия использования представленных инструкций.
+
+Пользователь обязан самостоятельно соблюдать законодательство своей страны.
+
+Если вы не согласны с этими условиями — **прекратите использование данного репозитория**.
+Это сделает репозиторий **намного более профессиональным визуально**.
