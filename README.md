@@ -14,6 +14,7 @@
 
 [![Scripts](https://img.shields.io/badge/Scripts-install-blue?style=for-the-badge&logo=gnubash)](#-one-click-install)
 [![Guides](https://img.shields.io/badge/Guides-linux%20server-green?style=for-the-badge&logo=linux)](#-основные-гайды)
+[![Server Security](https://img.shields.io/badge/Server%20Security-hardening-red?style=for-the-badge&logo=letsencrypt)](#-server-security)
 [![VPN Docs](https://img.shields.io/badge/VPN-documentation-orange?style=for-the-badge&logo=wireguard)](#-vpn-инструкции)
 [![Wiki](https://img.shields.io/badge/Wiki-server%20knowledge-purple?style=for-the-badge&logo=github)](https://github.com/r00t-man/MZT/tree/main/my-wiki)
 [![Info](https://img.shields.io/badge/Info-routing%20notes-yellow?style=for-the-badge&logo=readthedocs)](https://github.com/r00t-man/MZT/tree/main/info)
@@ -71,6 +72,23 @@
 
 ---
 
+# 🔐 Server Security
+
+Отдельный раздел с универсальными материалами по защите серверов:
+
+👉 https://github.com/r00t-man/MZT/tree/main/Server_Security
+
+Включает:
+
+- базовый hardening сервера
+- безопасную настройку `sudo`
+- hardening через `sysctl.conf`
+- SSH-ключи
+- безопасную DNS-конфигурацию (DoT + DNSSEC)
+- сетевой кейс VPS с масками `/32` и `/24`
+
+---
+
 # 📡 VPN инструкции 3X-UI
 
 Полная серия инструкций по развёртыванию и настройке VPN находится в папке **VPN_3x-ui**:
@@ -82,8 +100,6 @@
 - установка собственного VPN  
 - каскадные конфигурации  
 - настройка DNS (DoH / DoT)  
-- безопасность сервера  
-- SSH ключи  
 - оптимизация сети  
 
 ---
@@ -115,21 +131,24 @@ MZT
 │   ├── README.md
 │   └── Правила маршрутизации Remna.md
 │
+├── Server_Security
+│   ├── README.md
+│   ├── 02_Настройка безопасности сервера.md
+│   ├── 03_Безопасная настройка sudo.md
+│   ├── 06_Настройка безопасности sysctl.conf.md
+│   ├── 07_Настройка SSH-ключей.md
+│   ├── 12_Безопасная DNS-конфигурация сервера (DoT + DNSSEC).md
+│   └── 13_Сетевой кейс VPS маски 24 и 32.md
+│
 └── VPN_3x-ui
     ├── 00_Введение в технологию.md
     ├── 01_Установка своего VPN.md
-    ├── 02_Настройка безопасности на VPN сервере.md
-    ├── 03_Обновление sudo.md
     ├── 04_Настройка каскадного VPN.md
     ├── 05_Настройка правил для доменов.md
-    ├── 06_Настройка безопасности sysctl.conf.md
-    ├── 07_Настройка SSH-ключей.md
     ├── 08_Установка собственного DNS.md
     ├── 09_Настройка DNS (DoT) на VPN.md
     ├── 10_Настройка DNS (DoH) на VPN.md
     ├── 11_DNS (DoT) - Возможна ошибка.md
-    ├── 12_Настройка DNS на самом сервере DNS.md
-    ├── 13_Про маски 24 и 32.md
     └── 14_Размывка трафика VPN.md
 
 ```
