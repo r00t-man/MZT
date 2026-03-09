@@ -10,7 +10,7 @@
 
 # 📚 О репозитории
 
-## 🧭 Quick Navigation
+## 🧭 Быстрая Навигация
 
 [![Scripts](https://img.shields.io/badge/Scripts-install-blue?style=for-the-badge&logo=gnubash)](#-one-click-install)
 [![Guides](https://img.shields.io/badge/Guides-linux%20server-green?style=for-the-badge&logo=linux)](#-основные-гайды)
@@ -29,7 +29,7 @@
 
 ---
 
-# 🚀 One-Click Install
+# 🚀 Установка в один клик
 
 Некоторые скрипты можно установить **одной командой**.
 
