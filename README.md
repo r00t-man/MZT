@@ -16,6 +16,7 @@
 [![Guides](https://img.shields.io/badge/Guides-linux%20server-green?style=for-the-badge&logo=linux)](#-основные-гайды)
 [![VPN Docs](https://img.shields.io/badge/VPN-documentation-orange?style=for-the-badge&logo=wireguard)](#-vpn-инструкции)
 [![Wiki](https://img.shields.io/badge/Wiki-server%20knowledge-purple?style=for-the-badge&logo=github)](https://github.com/r00t-man/MZT/tree/main/my-wiki)
+[![Info](https://img.shields.io/badge/Info-routing%20notes-yellow?style=for-the-badge&logo=readthedocs)](https://github.com/r00t-man/MZT/tree/main/info)
 
 **MZT** — это коллекция:
 
@@ -60,6 +61,16 @@
 
 ---
 
+# ℹ️ Раздел Info
+
+В корне репозитория добавлен раздел **info** с отдельными тематическими статьями:
+
+- 🛣️ Правила маршрутизации Remna
+
+👉 https://github.com/r00t-man/MZT/tree/main/info
+
+---
+
 # 📡 VPN инструкции 3X-UI
 
 Полная серия инструкций по развёртыванию и настройке VPN находится в папке **VPN_3x-ui**:
@@ -99,6 +110,10 @@ MZT
 │   ├── MTProxy_TG.md
 │   ├── WARP-remna.md
 │   └── Ultra Clean VPS.md
+│
+├── info
+│   ├── README.md
+│   └── Правила маршрутизации Remna.md
 │
 └── VPN_3x-ui
     ├── 00_Введение в технологию.md
