@@ -10,15 +10,22 @@
 
 # 📚 О репозитории
 
+## 🧭 Quick Navigation
+
+[![Scripts](https://img.shields.io/badge/Scripts-install-blue?style=for-the-badge&logo=gnubash)](#-one-click-install)
+[![Guides](https://img.shields.io/badge/Guides-linux%20server-green?style=for-the-badge&logo=linux)](#-основные-гайды)
+[![VPN Docs](https://img.shields.io/badge/VPN-documentation-orange?style=for-the-badge&logo=wireguard)](#-vpn-инструкции)
+[![Wiki](https://img.shields.io/badge/Wiki-server%20knowledge-purple?style=for-the-badge&logo=github)](https://github.com/r00t-man/MZT/tree/main/my-wiki)
+
 **MZT** — это коллекция:
 
 - 🧰 скриптов для администрирования Linux  
 - 📡 сетевых инструментов и прокси  
 - 🔐 инструкций по безопасности серверов  
-- 🐳 утилит для работы с Docker  
-- 🧹 скриптов обслуживания VPS  
+- 🐳 утилит для управления Docker  
+- 🧹 инструментов для обслуживания VPS  
 
-Репозиторий используется как **мини-вики по администрированию серверов**.
+Репозиторий используется как **мини-вики по администрированию серверов и сетевых сервисов**.
 
 ---
 
@@ -28,11 +35,43 @@
 
 | Script | Description | Install |
 |------|------|------|
-| 🧹 Ultra Clean VPS | Очистка и оптимизация сервера | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/Ultra_Clean_VPS.sh)` |
-| 🐳 Docker Control | Управление Docker контейнерами | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/control-docker-v5.2-cli.sh)` |
-| 🔐 Audit History | Логирование команд Linux | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/audit-history.sh)` |
-| 📡 MTProto Proxy | Установка MTProxy для Telegram | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/tg_mtproxy.sh)` |
-| 🌐 SOCKS5 Proxy | SOCKS5 прокси менеджер (Dante) | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/Proxy_socks5_dante.sh)` |
+| 🧹 **Ultra Clean VPS** | Очистка и оптимизация сервера | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/Ultra_Clean_VPS.sh)` |
+| 🐳 **Docker Control** | Управление Docker контейнерами | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/control-docker-v5.2-cli.sh)` |
+| 🔐 **Audit History** | Логирование команд Linux | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/audit-history.sh)` |
+| 📡 **MTProto Proxy** | Установка MTProxy для Telegram | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/tg_mtproxy.sh)` |
+| 🌐 **SOCKS5 Proxy (Dante)** | Менеджер пользователей SOCKS5 | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/Proxy_socks5_dante.sh)` |
+
+---
+
+# 📚 Основные гайды
+
+📖 Основные инструкции и статьи находятся здесь:
+
+👉 https://github.com/r00t-man/MZT/tree/main/my-wiki
+
+Там находятся гайды по:
+
+- 🐳 Docker  
+- 🔐 безопасности серверов  
+- 📡 прокси и сетевым сервисам  
+- 🧹 обслуживанию VPS  
+
+---
+
+# 📡 VPN инструкции
+
+Полная серия инструкций по развёртыванию и настройке VPN находится **в корне репозитория**:
+
+👉 https://github.com/r00t-man/MZT
+
+Включает:
+
+- установка собственного VPN  
+- каскадные конфигурации  
+- настройка DNS (DoH / DoT)  
+- безопасность сервера  
+- SSH ключи  
+- оптимизация сети  
 
 ---
 
@@ -58,7 +97,7 @@ MZT
 │   ├── MTProxy_TG.md
 │   └── Ultra Clean VPS.md
 │
-└── VPN guides
+└── VPN Guides
 ├── 00_Введение в технологию.md
 ├── 01_Установка своего VPN.md
 ├── 02_Настройка безопасности.md
@@ -79,53 +118,27 @@ MZT
 
 ---
 
-# 📚 Основные инструкции
+# 🧭 Использование репозитория
 
-### 🔐 Безопасность сервера
+Репозиторий можно использовать как:
 
-- SSH ключи
-- sysctl hardening
-- обновление sudo
-
-### 📡 VPN
-
-- установка собственного VPN
-- каскадные конфигурации
-- настройка DNS
-- маскировка трафика
-
-### 🐳 Docker
-
-- управление контейнерами
-- обслуживание Docker
-
-### 🧹 Обслуживание VPS
-
-- очистка системы
-- оптимизация диска
-- аудит команд
-
----
-
-# 🧭 Быстрый переход к инструкциям
-
-📖 Основные гайды находятся здесь:
-
-https://github.com/r00t-man/MZT/tree/main/my-wiki
+- 📚 **базу знаний по администрированию Linux**
+- 🧰 **набор полезных серверных скриптов**
+- 📡 **практические инструкции по настройке VPN**
+- 🔐 **гайд по безопасности серверов**
 
 ---
 
 # ⚠️ Дисклеймер
 
 > [!IMPORTANT]
-> Все материалы публикуются **исключительно в образовательных целях**.
+> Все материалы опубликованы **исключительно в образовательных целях**.
 
 Информация предназначена для:
 
 - администрирования серверов  
 - тестирования сетевых технологий  
-- повышения безопасности  
+- повышения безопасности инфраструктуры  
 
-Автор не несёт ответственности за использование материалов в противоправных целях.
-
+Автор не несёт ответственности за использование материалов в противоправных целях.  
 Пользователь обязан соблюдать законодательство своей страны.
