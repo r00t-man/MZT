@@ -18,38 +18,24 @@
 - 🖥 администрирование VPS  
 - 🔐 безопасность серверов  
 - 🐳 управление Docker  
-- 📡 прокси и сетевые сервисы  
-- 🧹 обслуживание и очистка серверов  
+- 📡 MTProxy для Telegram и SOCKS5  
+- 🧹 Очистка серверов, особенно если на VPS диск 10 Гб
 
 ---
 
 # 🚀 One-Click Install
 
-Некоторые скрипты можно установить **одной командой**.
+Некоторые скрипты можно установить **одной командой** прямо на сервере.
 
-### 🧹 Ultra Clean VPS
+> Поддерживаемые системы: **Ubuntu 24.04 / Debian 12**
 
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/Ultra_Clean_VPS.sh)
-````
-
----
-
-### 🐳 Docker Control CLI
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/control-docker-v5.2-cli.sh)
-```
-
----
-
-### 🔐 Audit History (логирование команд)
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/audit-history.sh)
-```
-
----
+| Script | Description | Install |
+|------|------|------|
+| 🧹 **Ultra Clean VPS** | Глубокая очистка и оптимизация VPS | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/Ultra_Clean_VPS.sh)` |
+| 🐳 **Docker Control CLI** | Интерактивное управление Docker контейнерами | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/control-docker-v5.2-cli.sh)` |
+| 🔐 **Audit History** | Логирование всех команд пользователей Linux | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/audit-history.sh)` |
+| 📡 **Telegram MTProto Proxy** | Установка и настройка MTProxy для Telegram | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/tg_mtproxy.sh)` |
+| 🌐 **SOCKS5 Proxy Manager (Dante)** | Менеджер пользователей SOCKS5 прокси | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/Proxy_socks5_dante.sh)` |
 
 # 📂 Навигация (Mini Wiki)
 
