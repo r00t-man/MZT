@@ -55,7 +55,7 @@
 - 🐳 Docker  
 - 🔐 безопасности серверов  
 - 📡 прокси и сетевым сервисам  
-- ☁️ Cloudflare WARP для remnanode — [WARP-remna.md](https://github.com/r00t-man/MZT/blob/main/my-wiki/WARP-remna.md)  
+- ☁️ Cloudflare WARP для remnanode
 - 🧹 обслуживанию VPS  
 
 ---
