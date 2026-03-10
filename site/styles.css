@@ -8,6 +8,16 @@
   --sidebar: #f6f8fa;
 }
 
+:root[data-theme='dark'] {
+  --bg: #0d1117;
+  --surface: #161b22;
+  --line: #30363d;
+  --text: #c9d1d9;
+  --muted: #8b949e;
+  --link: #58a6ff;
+  --sidebar: #11161d;
+}
+
 * { box-sizing: border-box; }
 body {
   margin: 0;
@@ -35,6 +45,11 @@ body {
   align-items: center;
   justify-content: space-between;
 }
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: .8rem;
+}
 .brand {
   font-weight: 700;
   color: var(--text);
@@ -45,6 +60,15 @@ body {
   color: var(--link);
   text-decoration: none;
   font-weight: 600;
+}
+.theme-toggle {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: 6px;
+  padding: .35rem .65rem;
+  font-size: .88rem;
+  cursor: pointer;
 }
 
 .layout {
@@ -87,9 +111,7 @@ body {
   background: var(--surface);
 }
 
-.content {
-  min-width: 0;
-}
+.content { min-width: 0; }
 .intro {
   background: var(--surface);
   border: 1px solid var(--line);
@@ -110,6 +132,8 @@ body {
   padding: .65rem .75rem;
   font-size: .95rem;
   margin: .5rem 0;
+  background: var(--surface);
+  color: var(--text);
 }
 
 .catalog { display: grid; gap: .8rem; }
@@ -137,7 +161,7 @@ body {
   border-radius: 6px;
   padding: .45rem .5rem;
 }
-.file-item:hover { background: #f6f8fa; }
+.file-item:hover { background: var(--sidebar); }
 .file-name {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: .9rem;

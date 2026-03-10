@@ -1,3 +1,5 @@
+const THEME_KEY = 'mzt-theme';
+
 async function loadIndex() {
   const response = await fetch('content-index.json');
   if (!response.ok) throw new Error('Не удалось загрузить content-index.json');
@@ -21,6 +23,29 @@ function githubUrls(ctx, filePath) {
 
 function sectionId(name) {
   return `section-${name.toLowerCase().replace(/[^a-zа-я0-9]+/gi, '-')}`;
+}
+
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem(THEME_KEY, theme);
+  const button = document.getElementById('theme-toggle');
+  if (!button) return;
+  button.textContent = theme === 'dark' ? '☀️ Светлая' : '🌙 Тёмная';
+}
+
+function initTheme() {
+  const saved = localStorage.getItem(THEME_KEY);
+  const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const initial = saved || (prefersDark ? 'dark' : 'light');
+
+  applyTheme(initial);
+
+  const button = document.getElementById('theme-toggle');
+  if (!button) return;
+  button.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') || 'light';
+    applyTheme(current === 'dark' ? 'light' : 'dark');
+  });
 }
 
 function renderMenu(sections) {
@@ -98,6 +123,8 @@ function renderCatalog(index, ctx) {
 }
 
 async function init() {
+  initTheme();
+
   const ctx = detectRepoContext();
   const repoLink = document.getElementById('repo-link');
   const repoMeta = document.getElementById('repo-meta');
