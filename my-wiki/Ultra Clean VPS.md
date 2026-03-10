@@ -36,6 +36,30 @@ curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/heads/main/files/
 
 ---
 
+# 💾 Бэкап перед очисткой (рекомендуется)
+
+Если на диске есть запас места, перед запуском очистки можно сохранить удаляемые данные в архив.
+
+### Вариант одной командой (бэкап в `/backup_ultra_clean`)
+
+```bash
+sudo bash -c 'command -v tar >/dev/null || (apt update && apt install -y tar); TS=$(date +%F_%H-%M-%S); mkdir -p /backup_ultra_clean; tar -czf /backup_ultra_clean/ultra_clean_backup_${TS}.tar.gz /var/log/journal /var/lib/apt/lists /var/cache/apt/archives /tmp /var/tmp /var/lib/docker 2>/dev/null || true; ls -lh /backup_ultra_clean'
+```
+
+Что делает команда:
+
+* проверяет наличие `tar` (обычно уже установлен в Ubuntu 24.04)
+* при необходимости устанавливает архиватор
+* создаёт каталог `/backup_ultra_clean`
+* собирает архив с датой и временем в имени
+* показывает итоговый размер бэкапа.
+
+После этого можно запускать `Ultra_Clean_VPS.sh`.
+
+> ⚠️ Если Docker не установлен или часть путей отсутствует — это нормально, команда продолжит работу.
+
+---
+
 # 📥 Скачать скрипт
 
 Если хотите сначала скачать файл:
