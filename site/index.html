@@ -3,39 +3,40 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MZT · GitHub Pages</title>
+  <title>MZT · Docs</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
-  <header class="hero">
-    <div class="container">
-      <p class="kicker">GitHub Pages</p>
-      <h1>MZT Knowledge Base</h1>
-      <p class="subtitle">
-        Каталог материалов репозитория: инструкции по VPN, безопасности серверов, скрипты и wiki-заметки.
-      </p>
-      <div class="repo-meta" id="repo-meta">Определяем параметры репозитория…</div>
-      <div class="actions">
-        <a class="btn" id="repo-link" href="#" target="_blank" rel="noopener">Открыть репозиторий</a>
-        <a class="btn btn-ghost" href="https://pages.github.com/" target="_blank" rel="noopener">GitHub Pages Docs</a>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#">MZT</a>
+      <div class="topbar-actions">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему">🌙 Тёмная</button>
+        <a class="repo-link" id="repo-link" href="#" target="_blank" rel="noopener">GitHub Repo</a>
       </div>
     </div>
   </header>
 
-  <main class="container">
-    <section class="controls">
-      <input id="search" type="search" placeholder="Поиск по файлам и разделам…" />
-      <span id="stats"></span>
-    </section>
+  <div class="wrap layout">
+    <aside class="sidebar">
+      <h2 class="sidebar-title">Меню разделов</h2>
+      <nav id="menu" class="menu"></nav>
+    </aside>
 
-    <section id="catalog" class="catalog"></section>
-  </main>
+    <main class="content">
+      <section class="intro">
+        <h1>MZT Documentation</h1>
+        <p id="repo-meta" class="repo-meta">Определяем репозиторий…</p>
+        <input id="search" type="search" placeholder="Поиск по файлам и разделам" />
+        <p id="stats" class="stats"></p>
+      </section>
 
-  <footer class="container footer">
-    <p>
-      Сайт находится в папке <code>site/</code>. Для публикации включите GitHub Pages для ветки и директории
-      <code>/site</code>.
-    </p>
+      <section id="catalog" class="catalog"></section>
+    </main>
+  </div>
+
+  <footer class="wrap footer">
+    <p>GitHub Pages: настройте в <code>Settings → Pages</code> публикацию из <code>main</code> и папки <code>/site</code>.</p>
   </footer>
 
   <script src="app.js"></script>
