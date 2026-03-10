@@ -1,0 +1,160 @@
+:root {
+  --bg: #f7f9fb;
+  --surface: #ffffff;
+  --line: #e1e4e8;
+  --text: #24292f;
+  --muted: #57606a;
+  --link: #0969da;
+  --sidebar: #f6f8fa;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+  line-height: 1.5;
+}
+
+.wrap {
+  width: min(1200px, 94vw);
+  margin: 0 auto;
+}
+
+.topbar {
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  z-index: 20;
+}
+.topbar-inner {
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.brand {
+  font-weight: 700;
+  color: var(--text);
+  text-decoration: none;
+  font-size: 1.1rem;
+}
+.repo-link {
+  color: var(--link);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 1.2rem;
+  margin-top: 1.2rem;
+}
+
+.sidebar {
+  background: var(--sidebar);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: .9rem;
+  height: fit-content;
+  position: sticky;
+  top: 76px;
+}
+.sidebar-title {
+  margin: 0 0 .8rem;
+  font-size: .95rem;
+  color: var(--muted);
+}
+.menu {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+.menu a {
+  color: var(--text);
+  text-decoration: none;
+  padding: .45rem .55rem;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  font-size: .94rem;
+}
+.menu a:hover,
+.menu a.active {
+  border-color: var(--line);
+  background: var(--surface);
+}
+
+.content {
+  min-width: 0;
+}
+.intro {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.intro h1 {
+  margin: 0 0 .4rem;
+  font-size: 1.8rem;
+}
+.repo-meta,.stats { color: var(--muted); }
+
+#search {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: .65rem .75rem;
+  font-size: .95rem;
+  margin: .5rem 0;
+}
+
+.catalog { display: grid; gap: .8rem; }
+.section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.section-header {
+  padding: .7rem .9rem;
+  border-bottom: 1px solid var(--line);
+  font-weight: 600;
+}
+.file-list {
+  list-style: none;
+  margin: 0;
+  padding: .5rem;
+}
+.file-item {
+  display: flex;
+  justify-content: space-between;
+  gap: .7rem;
+  align-items: center;
+  border-radius: 6px;
+  padding: .45rem .5rem;
+}
+.file-item:hover { background: #f6f8fa; }
+.file-name {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: .9rem;
+}
+.file-links a {
+  color: var(--link);
+  text-decoration: none;
+  margin-left: .7rem;
+  font-size: .9rem;
+}
+
+.footer {
+  padding: 1.2rem 0 2rem;
+  color: var(--muted);
+}
+
+@media (max-width: 920px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { position: static; }
+}
