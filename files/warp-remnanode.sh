@@ -394,7 +394,7 @@ menu() {
     read -r -p "Выбор: " choice
 
     case "$choice" in
-      1) install_warp; connect_warp; read -r -p "Enter..." ;;
+      1) install_and_connect; read -r -p "Enter..." ;;
       2) show_status; read -r -p "Enter..." ;;
       3) restart_warp; show_status; read -r -p "Enter..." ;;
       4) disconnect_warp; read -r -p "Enter..." ;;
