@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MZT · Docs</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#">MZT</a>
+      <div class="topbar-actions">
+        <button class="theme-toggle" id="theme-toggle" type="button" aria-label="Переключить тему">🌙 Тёмная</button>
+        <a class="repo-link" id="repo-link" href="#" target="_blank" rel="noopener">GitHub Repo</a>
+      </div>
+    </div>
+  </header>
+
+  <div class="wrap layout">
+    <aside class="sidebar">
+      <h2 class="sidebar-title">Меню разделов</h2>
+      <nav id="menu" class="menu"></nav>
+    </aside>
+
+    <main class="content">
+      <section class="intro">
+        <h1>MZT Documentation</h1>
+        <p id="repo-meta" class="repo-meta">Определяем репозиторий…</p>
+        <input id="search" type="search" placeholder="Поиск по файлам и разделам" />
+        <p id="stats" class="stats"></p>
+      </section>
+
+      <section id="catalog" class="catalog"></section>
+    </main>
+  </div>
+
+  <footer class="wrap footer">
+    <p>GitHub Pages: настройте в <code>Settings → Pages</code> публикацию из <code>main</code> и папки <code>/site</code>.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
