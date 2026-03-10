@@ -67,6 +67,7 @@
 В корне репозитория добавлен раздел **info** с отдельными тематическими статьями:
 
 - 🛣️ Правила маршрутизации Remna
+- ⚖️ Балансировка remna
 
 👉 https://github.com/r00t-man/MZT/tree/main/info
 
@@ -129,6 +130,7 @@ MZT
 │
 ├── info
 │   ├── README.md
+│   ├── Балансировка remna.md
 │   └── Правила маршрутизации Remna.md
 │
 ├── Server_Security
