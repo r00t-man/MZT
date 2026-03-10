@@ -68,6 +68,7 @@
 
 - 🛣️ Правила маршрутизации Remna
 - ⚖️ Балансировка remna
+- 📘 Базовые команды Ubuntu 24 для подготовки VPN-ноды
 
 👉 https://github.com/r00t-man/MZT/tree/main/info
 
@@ -131,6 +132,7 @@ MZT
 ├── info
 │   ├── README.md
 │   ├── Балансировка remna.md
+│   ├── Базовые команды Ubuntu 24 для подготовки VPN-ноды.md
 │   └── Правила маршрутизации Remna.md
 │
 ├── Server_Security
