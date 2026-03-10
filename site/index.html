@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MZT · GitHub Pages</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="container">
+      <p class="kicker">GitHub Pages</p>
+      <h1>MZT Knowledge Base</h1>
+      <p class="subtitle">
+        Каталог материалов репозитория: инструкции по VPN, безопасности серверов, скрипты и wiki-заметки.
+      </p>
+      <div class="repo-meta" id="repo-meta">Определяем параметры репозитория…</div>
+      <div class="actions">
+        <a class="btn" id="repo-link" href="#" target="_blank" rel="noopener">Открыть репозиторий</a>
+        <a class="btn btn-ghost" href="https://pages.github.com/" target="_blank" rel="noopener">GitHub Pages Docs</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="controls">
+      <input id="search" type="search" placeholder="Поиск по файлам и разделам…" />
+      <span id="stats"></span>
+    </section>
+
+    <section id="catalog" class="catalog"></section>
+  </main>
+
+  <footer class="container footer">
+    <p>
+      Сайт находится в папке <code>site/</code>. Для публикации включите GitHub Pages для ветки и директории
+      <code>/site</code>.
+    </p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
