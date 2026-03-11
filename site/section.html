@@ -3,19 +3,18 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>MZT — Главная</title>
+  <title>MZT — Раздел</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
-<body data-page="home">
+<body data-page="section">
   <header id="top-nav"></header>
   <main class="container">
-    <article class="doc-card">
-      <h1>README (главная)</h1>
-      <div id="doc-content">Загрузка…</div>
-    </article>
+    <section class="doc-card">
+      <h1 id="section-title">Раздел</h1>
+      <ul id="article-list" class="article-list"></ul>
+    </section>
   </main>
 
-  <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -1,0 +1,137 @@
+{
+  "home": "README.md",
+  "sections": [
+    {
+      "id": "Server_Security",
+      "title": "Настройки сервера",
+      "files": [
+        {
+          "title": "02_Настройка безопасности сервера",
+          "path": "Server_Security/02_Настройка безопасности сервера.md"
+        },
+        {
+          "title": "03_Безопасная настройка sudo",
+          "path": "Server_Security/03_Безопасная настройка sudo.md"
+        },
+        {
+          "title": "06_Настройка безопасности sysctl.conf",
+          "path": "Server_Security/06_Настройка безопасности sysctl.conf.md"
+        },
+        {
+          "title": "07_Настройка SSH-ключей",
+          "path": "Server_Security/07_Настройка SSH-ключей.md"
+        },
+        {
+          "title": "12_Безопасная DNS-конфигурация сервера (DoT + DNSSEC)",
+          "path": "Server_Security/12_Безопасная DNS-конфигурация сервера (DoT + DNSSEC).md"
+        },
+        {
+          "title": "13_Сетевой кейс VPS маски 24 и 32",
+          "path": "Server_Security/13_Сетевой кейс VPS маски 24 и 32.md"
+        },
+        {
+          "title": "README",
+          "path": "Server_Security/README.md"
+        }
+      ]
+    },
+    {
+      "id": "VPN_3x-ui",
+      "title": "VPN 3x-ui",
+      "files": [
+        {
+          "title": "00_Введение в технологию",
+          "path": "VPN_3x-ui/00_Введение в технологию.md"
+        },
+        {
+          "title": "01_Установка своего VPN",
+          "path": "VPN_3x-ui/01_Установка своего VPN.md"
+        },
+        {
+          "title": "04_Настройка каскадного VPN",
+          "path": "VPN_3x-ui/04_Настройка каскадного VPN.md"
+        },
+        {
+          "title": "05_Настройка правил для доменов",
+          "path": "VPN_3x-ui/05_Настройка правил для доменов.md"
+        },
+        {
+          "title": "08_Установка собственного DNS",
+          "path": "VPN_3x-ui/08_Установка собственного DNS.md"
+        },
+        {
+          "title": "09_Настройка DNS (DoT) на VPN",
+          "path": "VPN_3x-ui/09_Настройка DNS (DoT) на VPN.md"
+        },
+        {
+          "title": "10_Настройка DNS (DoH) на VPN",
+          "path": "VPN_3x-ui/10_Настройка DNS (DoH) на VPN.md"
+        },
+        {
+          "title": "11_DNS (DoT) - Возможна ошибка",
+          "path": "VPN_3x-ui/11_DNS (DoT) - Возможна ошибка.md"
+        },
+        {
+          "title": "14_Размывка трафика VPN",
+          "path": "VPN_3x-ui/14_Размывка трафика VPN.md"
+        }
+      ]
+    },
+    {
+      "id": "info",
+      "title": "Инфо",
+      "files": [
+        {
+          "title": "README",
+          "path": "info/README.md"
+        },
+        {
+          "title": "Базовые команды Ubuntu 24 для подготовки VPN-ноды",
+          "path": "info/Базовые команды Ubuntu 24 для подготовки VPN-ноды.md"
+        },
+        {
+          "title": "Балансировка remna",
+          "path": "info/Балансировка remna.md"
+        },
+        {
+          "title": "Правила маршрутизации Remna",
+          "path": "info/Правила маршрутизации Remna.md"
+        }
+      ]
+    },
+    {
+      "id": "my-wiki",
+      "title": "Мои проекты",
+      "files": [
+        {
+          "title": "Audit-history",
+          "path": "my-wiki/Audit-history.md"
+        },
+        {
+          "title": "Docker control",
+          "path": "my-wiki/Docker control.md"
+        },
+        {
+          "title": "MTProxy_TG",
+          "path": "my-wiki/MTProxy_TG.md"
+        },
+        {
+          "title": "Proxy SOCKS5 manager",
+          "path": "my-wiki/Proxy SOCKS5 manager.md"
+        },
+        {
+          "title": "readme",
+          "path": "my-wiki/readme.md"
+        },
+        {
+          "title": "Ultra Clean VPS",
+          "path": "my-wiki/Ultra Clean VPS.md"
+        },
+        {
+          "title": "WARP-remna",
+          "path": "my-wiki/WARP-remna.md"
+        }
+      ]
+    }
+  ]
+}
