@@ -21,6 +21,7 @@
       "name": "info",
       "files": [
         "info/README.md",
+        "info/Автоматическая передача файлов между серверами через rsync и SSH.md",
         "info/Базовые команды Ubuntu 24 для подготовки VPN-ноды.md",
         "info/Балансировка remna.md",
         "info/Правила маршрутизации Remna.md"
