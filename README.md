@@ -10,8 +10,6 @@
 
 # 📚 О репозитории
 
-## 🌐 Также есть [сайт репозитория](https://r00t-man.github.io/MZT/site/index.html) 
-
 ## 🧭 Быстрая Навигация
 
 [![Scripts](https://img.shields.io/badge/Scripts-install-blue?style=for-the-badge&logo=gnubash)](#-one-click-install)
