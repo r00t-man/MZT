@@ -1,0 +1,75 @@
+{
+  "sections": [
+    {
+      "name": "files",
+      "files": [
+        "files/audit-history.sh",
+        "files/control-docker-v5.2-cli.sh",
+        "files/Proxy_socks5_dante.sh",
+        "files/tg_mtproxy.sh",
+        "files/Ultra_Clean_VPS.sh",
+        "files/warp-remnanode.sh"
+      ]
+    },
+    {
+      "name": "help",
+      "files": [
+        "help/Programms.md"
+      ]
+    },
+    {
+      "name": "info",
+      "files": [
+        "info/README.md",
+        "info/Базовые команды Ubuntu 24 для подготовки VPN-ноды.md",
+        "info/Балансировка remna.md",
+        "info/Правила маршрутизации Remna.md"
+      ]
+    },
+    {
+      "name": "my-wiki",
+      "files": [
+        "my-wiki/Audit-history.md",
+        "my-wiki/Docker control.md",
+        "my-wiki/MTProxy_TG.md",
+        "my-wiki/Proxy SOCKS5 manager.md",
+        "my-wiki/readme.md",
+        "my-wiki/Ultra Clean VPS.md",
+        "my-wiki/WARP-remna.md"
+      ]
+    },
+    {
+      "name": "Server_Security",
+      "files": [
+        "Server_Security/02_Настройка безопасности сервера.md",
+        "Server_Security/03_Безопасная настройка sudo.md",
+        "Server_Security/06_Настройка безопасности sysctl.conf.md",
+        "Server_Security/07_Настройка SSH-ключей.md",
+        "Server_Security/12_Безопасная DNS-конфигурация сервера (DoT + DNSSEC).md",
+        "Server_Security/13_Сетевой кейс VPS маски 24 и 32.md",
+        "Server_Security/README.md"
+      ]
+    },
+    {
+      "name": "VPN_3x-ui",
+      "files": [
+        "VPN_3x-ui/00_Введение в технологию.md",
+        "VPN_3x-ui/01_Установка своего VPN.md",
+        "VPN_3x-ui/04_Настройка каскадного VPN.md",
+        "VPN_3x-ui/05_Настройка правил для доменов.md",
+        "VPN_3x-ui/08_Установка собственного DNS.md",
+        "VPN_3x-ui/09_Настройка DNS (DoT) на VPN.md",
+        "VPN_3x-ui/10_Настройка DNS (DoH) на VPN.md",
+        "VPN_3x-ui/11_DNS (DoT) - Возможна ошибка.md",
+        "VPN_3x-ui/14_Размывка трафика VPN.md"
+      ]
+    },
+    {
+      "name": "Корень репозитория",
+      "files": [
+        "LICENSE",
+        "README.md"
+      ]
+    }
+  ]
+}

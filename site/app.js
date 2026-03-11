@@ -1,19 +1,8 @@
-const DATA_CANDIDATES = ['data/content.json', 'site/data/content.json'];
-const CONTENT_CANDIDATES = ['content', 'site/content'];
-
-let contentBase = CONTENT_CANDIDATES[0];
-
-async function fetchFirstAvailable(paths) {
-  for (const path of paths) {
-    const response = await fetch(path);
-    if (response.ok) return { response, path };
-  }
-  throw new Error(`Не удалось загрузить ни один из путей: ${paths.join(', ')}`);
-}
+const DATA_PATH = 'data/content.json';
 
 async function loadContentMap() {
-  const { response, path } = await fetchFirstAvailable(DATA_CANDIDATES);
-  if (path.startsWith('site/')) contentBase = 'site/content';
+  const response = await fetch(DATA_PATH);
+  if (!response.ok) throw new Error('Не удалось загрузить карту контента');
   return response.json();
 }
 
@@ -42,7 +31,7 @@ function buildTopNav(data) {
 }
 
 async function loadMarkdown(path) {
-  const response = await fetch(`${contentBase}/${path}`);
+  const response = await fetch(`content/${path}`);
   if (!response.ok) throw new Error(`Не удалось загрузить: ${path}`);
   return response.text();
 }
@@ -56,7 +45,7 @@ function findSection(data, sectionId) {
   return data.sections.find((section) => section.id === sectionId);
 }
 
-async function renderHome() {
+async function renderHome(data) {
   const md = await loadMarkdown('README.md');
   renderMarkdown('doc-content', md);
 }
@@ -96,7 +85,7 @@ async function init() {
     buildTopNav(data);
 
     const page = document.body.dataset.page;
-    if (page === 'home') await renderHome();
+    if (page === 'home') await renderHome(data);
     if (page === 'section') renderSectionPage(data);
     if (page === 'article') await renderArticlePage(data);
   } catch (error) {
