@@ -19,3 +19,21 @@
 В `VPN_3x-ui` остались материалы, которые относятся преимущественно к
 развёртыванию и эксплуатации VPN: установка, каскадирование, доменные правила,
 VPN-специфичные DNS-сценарии и маскировка трафика.
+
+---
+
+## 🆕 Новая статья по мониторингу
+
+- 📘 [Grafana Prometheus Setup](../my-wiki/Grafana%20Prometheus%20Setup.md)
+
+**Быстрый старт (центральный сервер):**
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)
+```
+
+**Быстрый старт (агенты/ноды):**
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
+```
