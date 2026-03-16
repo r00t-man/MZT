@@ -88,6 +88,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 
 - 🛣️ Правила маршрутизации Remna
 - ⚖️ Конфиг балансировки в Remnawave (leastLoad / leastPing / roundRobin)
+- 📌 Шпаргалка: VLESS → JSON (дополнение к Remna)
 - 📘 Базовые команды Ubuntu 24 для подготовки VPN-ноды
 - 🔄 Автоматическая передача файлов между серверами через rsync и SSH
 - 📊 Мониторинг Beszel — быстрый старт
@@ -158,6 +159,7 @@ MZT
 │   ├── README.md
 │   ├── Автоматическая передача файлов между серверами через rsync и SSH.md
 │   ├── Балансировка remna.md
+│   ├── Шпаргалка VLESS в балансировочный JSON для remna.md
 │   ├── Базовые команды Ubuntu 24 для подготовки VPN-ноды.md
 │   ├── Мониторинг Beszel — быстрый старт.md
 │   └── Правила маршрутизации Remna.md
