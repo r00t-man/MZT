@@ -138,7 +138,9 @@ MZT
 │   ├── control-docker-v5.2-cli.sh
 │   ├── audit-history.sh
 │   ├── tg_mtproxy.sh
-│   └── Proxy_socks5_dante.sh
+│   ├── Proxy_socks5_dante.sh
+│   ├── install_grafana_prometheus.sh
+│   └── install_node_exporter_agent.sh
 │
 ├── help
 │   └── Programms.md
@@ -148,7 +150,8 @@ MZT
 │   ├── Docker control.md
 │   ├── MTProxy_TG.md
 │   ├── WARP-remna.md
-│   └── Ultra Clean VPS.md
+│   ├── Ultra Clean VPS.md
+│   └── Grafana Prometheus Setup.md
 │
 ├── info
 │   ├── README.md
