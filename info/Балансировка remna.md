@@ -1,291 +1,535 @@
-# ⚖️ Балансировка в Remna (injectHosts + balancers)
+# ⚖️ Конфиг балансировки в Remnawave (для новичков) — подробный разбор
 
-Эта статья — практический разбор балансировки трафика в **Remnawave/Remnanode** на базе Xray-логики: как использовать `injectHosts`, `tagPrefix`, `routing.balancers`, `fallbackTag` и когда выбирать `leastLoad`, `leastPing` или `roundRobin`.
-
-Основа: расширенная JSON-логика маршрутизации Xray + механика Remnawave для автоматической инжекции скрытых хостов.
+> 🧭 Эта инструкция написана максимально «человечески»: с пояснениями **что это**, **зачем это**, **где брать значения** и **как не сломать прод**.
 
 ---
 
-## 🧩 Что решает балансировка
+## 📌 Что вообще делает балансировка в Remnawave
 
-Балансировка нужна, когда у вас:
+Если простыми словами:
 
-- несколько одинаковых upstream-узлов;
-- один основной и несколько резервных;
-- разные задержки и нагрузка на узлах в течение суток.
+- у вас есть **одна точка входа** (балансирующий сервер);
+- и есть **несколько удалённых нод** (Германия, Польша, Нидерланды и т.д.);
+- балансировщик решает, **на какую ноду отправить трафик прямо сейчас**.
 
-Главная цель: не просто «раскидать» трафик, а сделать схему **устойчивой** — чтобы при деградации одного хоста маршрутизация продолжала работать без ручного переключения.
+Зачем это нужно:
 
----
-
-## 🧱 Ключевые элементы
-
-### 1) `injectHosts`
-
-`injectHosts` автоматически добавляет скрытые хосты в конфиг. Пользователь не выбирает их вручную, а `routing` работает с их `tag`.
-
-Чаще всего выбор хостов делается через:
-
-- `remarkRegex` (например, всё что начинается с `BAL-`);
-- `uuids` (точечный выбор конкретных узлов).
-
-### 2) `tagPrefix`
-
-`tagPrefix` задаёт основу для авто-тегов:
-
-- `proxy`
-- `proxy-2`
-- `proxy-3`
-- ...
-
-Это удобно, потому что в балансировщике можно использовать `selector: ["proxy"]` и автоматически покрывать всю группу.
-
-### 3) `routing.balancers`
-
-`balancers` управляют тем, какой outbound выбрать в моменте.
-
-Популярные стратегии:
-
-- `leastLoad` — выбор узла с наименьшей текущей нагрузкой/RTT по метрикам observatory;
-- `leastPing` — выбор узла с минимальным ping;
-- `roundRobin` — поочерёдная отправка запросов по кругу.
-
-### 4) `fallbackTag`
-
-`fallbackTag` — аварийный маршрут, если селектор балансировщика не дал живого/доступного кандидата.
+- 🚀 меньше лагов у пользователей;
+- 🛡️ выше отказоустойчивость (если одна нода недоступна, можно уйти на другую);
+- ⚙️ меньше ручной рутины (не нужно каждый раз переключать ноду руками).
 
 ---
 
-## ✅ Базовый рабочий шаблон: виртуальный хост + 3 скрытых узла
+## 🧠 Три популярные стратегии выбора ноды
+
+В `routing.balancers[].strategy.type` можно использовать:
+
+### 1) `leastLoad`
+
+**Что делает:** выбирает ноду с наименьшей текущей нагрузкой/RTT по метрикам `observatory`.
+
+✅ Плюсы:
+
+- обычно самый «умный» режим;
+- может давать более стабильный результат при неравномерной нагрузке.
+
+⚠️ Важно:
+
+- зависит от корректной телеметрии (`burstObservatory`/`observatory`);
+- если метрики не собираются — пользы меньше.
+
+---
+
+### 2) `leastPing`
+
+**Что делает:** выбирает ноду с минимальным ping.
+
+✅ Плюсы:
+
+- просто и предсказуемо;
+- очень хороший стартовый вариант для большинства.
+
+⚠️ Важно:
+
+- ping не всегда отражает реальную пропускную способность канала.
+
+---
+
+### 3) `roundRobin`
+
+**Что делает:** отправляет запросы по кругу: нода 1 → нода 2 → нода 3 → снова нода 1.
+
+✅ Плюсы:
+
+- равномерное распределение;
+- легко проверять и отлаживать.
+
+⚠️ Важно:
+
+- не учитывает качество канала в реальном времени.
+
+---
+
+## 🔐 Важное про безопасность перед началом
+
+### Никогда не публикуйте в открытом доступе:
+
+- `privateKey` входного Reality-сервера;
+- рабочие `UUID` клиентов в боевой среде;
+- живые полные VLESS-ссылки.
+
+### Лучше маскировать:
+
+- `publicKey`;
+- `shortId`;
+- реальные домены/адреса нод.
+
+---
+
+## 🛠️ Обезличенный учебный конфиг с комментариями (JSONC)
+
+> ⚠️ Важно: обычный JSON **не поддерживает комментарии**.
+> Этот блок нужен для чтения/обучения. Перед вставкой в рабочий Xray/Remnawave удалите комментарии.
+
+```jsonc
+{
+  "log": {
+    // Уровень логов: info / warning / error / debug
+    "loglevel": "info"
+  },
+
+  "inbounds": [
+    {
+      // Имя входящего подключения (используется в routing.rules.inboundTag)
+      "tag": "BALANCE-ENTRY",
+
+      // Порт приёма клиентов
+      "port": 443,
+      "listen": "0.0.0.0",
+      "protocol": "vless",
+
+      "settings": {
+        // В Remnawave клиенты часто управляются отдельно
+        "clients": [],
+        "decryption": "none"
+      },
+
+      "sniffing": {
+        "enabled": true,
+        "destOverride": ["http", "tls", "quic"]
+      },
+
+      "streamSettings": {
+        // Для Reality TCP — network=raw
+        "network": "raw",
+        "security": "reality",
+
+        "realitySettings": {
+          // Домен-маска (доступный HTTPS-сайт)
+          "dest": "REPLACE_DEST_SITE:443",
+          "show": false,
+          "xver": 0,
+
+          // shortId и privateKey ИМЕННО этого входного сервера
+          "shortIds": ["REPLACE_WITH_INBOUND_SHORT_ID"],
+          "privateKey": "REPLACE_WITH_INBOUND_PRIVATE_KEY",
+
+          "serverNames": ["REPLACE_DEST_SITE"]
+        }
+      }
+    }
+  ],
+
+  "outbounds": [
+    {
+      // Удалённая нода №1
+      "tag": "TO-DE-1",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "replace-node-1.example.com",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE_WITH_NODE_UUID",
+                "flow": "xtls-rprx-vision",
+                "level": 0,
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "github.com",
+          "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID"
+        }
+      }
+    },
+
+    {
+      // Удалённая нода №2
+      "tag": "TO-PL-1",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "replace-node-2.example.com",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE_WITH_NODE_UUID",
+                "flow": "xtls-rprx-vision",
+                "level": 0,
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "github.com",
+          "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID"
+        }
+      }
+    },
+
+    {
+      // Удалённая нода №3
+      "tag": "TO-EE-1",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "replace-node-3.example.com",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE_WITH_NODE_UUID",
+                "flow": "xtls-rprx-vision",
+                "level": 0,
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "github.com",
+          "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID"
+        }
+      }
+    },
+
+    {
+      // Удалённая нода №4
+      "tag": "TO-NL-1",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "replace-node-4.example.com",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE_WITH_NODE_UUID",
+                "flow": "xtls-rprx-vision",
+                "level": 0,
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "github.com",
+          "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID"
+        }
+      }
+    },
+
+    {
+      // Прямой выход с балансировочного сервера
+      "tag": "DIRECT",
+      "protocol": "freedom"
+    },
+    {
+      // Блокировка трафика
+      "tag": "BLOCK",
+      "protocol": "blackhole"
+    }
+  ],
+
+  "burstObservatory": {
+    "pingConfig": {
+      // Хост для проверок доступности
+      "destination": "http://www.gstatic.com/generate_204",
+      "interval": "1m",
+      "sampling": 1,
+      "timeout": "3s",
+      "connectivity": ""
+    },
+    // Собираем метрики по outbound-тегам TO-
+    "subjectSelector": ["TO-"]
+  },
+
+  "routing": {
+    "domainStrategy": "AsIs",
+
+    "balancers": [
+      {
+        "tag": "MAIN-BALANCER",
+        "selector": ["TO-"],
+        "strategy": {
+          // Варианты: leastLoad / leastPing / roundRobin
+          "type": "leastPing"
+        },
+
+        // Резервная нода (должна существовать в outbounds)
+        "fallbackTag": "TO-DE-1"
+      }
+    ],
+
+    "rules": [
+      {
+        "domain": ["geosite:category-ads-all"],
+        "outboundTag": "BLOCK"
+      },
+      {
+        "domain": [
+          "regexp:.*\\.ru$",
+          "regexp:.*\\.su$",
+          "regexp:.*\\.xn--p1ai$"
+        ],
+        "outboundTag": "DIRECT"
+      },
+      {
+        "inboundTag": ["BALANCE-ENTRY"],
+        "balancerTag": "MAIN-BALANCER"
+      }
+    ]
+  }
+}
+```
+
+---
+
+## 🧾 Быстрая шпаргалка: что из VLESS-ссылки куда вставлять
+
+Для каждого `outbound` (каждой удалённой ноды):
+
+- `address` ← хост после `@`
+- `port` ← порт после `:`
+- `id` ← UUID до `@`
+- `serverName` ← `sni=...`
+- `publicKey` ← `pbk=...`
+- `shortId` ← `sid=...`
+- `flow` ← обычно `xtls-rprx-vision`
+
+---
+
+## 🧱 Что менять во входном блоке (`inbounds`)
+
+Это данные **самого балансировочного сервера**:
+
+- `tag` — любое понятное имя (например, `BALANCE-ENTRY`)
+- `port` — обычно `443`
+- `dest` — сайт для маскировки (`github.com:443` и т.п.)
+- `shortIds` — shortId этого входного Reality
+- `privateKey` — приватный ключ этого входного Reality
+- `serverNames` — домены маскировки
+
+---
+
+## 🔁 Как переключать стратегию в 1 строку
+
+### Вариант A — lowest ping
+
+```json
+"strategy": { "type": "leastPing" }
+```
+
+### Вариант B — минимальная нагрузка
+
+```json
+"strategy": { "type": "leastLoad" }
+```
+
+### Вариант C — по кругу
+
+```json
+"strategy": { "type": "roundRobin" }
+```
+
+---
+
+## ➕ Как добавить ещё одну ноду
+
+1. Скопируйте любой блок `TO-...` в `outbounds`.
+2. Измените:
+   - `tag`
+   - `address`
+   - `id`
+   - `serverName`
+   - `publicKey`
+   - `shortId`
+3. Убедитесь, что `tag` начинается с `TO-` (иначе селектор `"TO-"` её не подхватит).
+4. Проверьте, что `fallbackTag` указывает на реально существующий тег.
+
+---
+
+## 🧪 Минимальный чек-лист после настройки
+
+- [ ] Конфиг валидируется без ошибок синтаксиса.
+- [ ] В `outbounds` есть минимум 2 ноды с тегом `TO-...`.
+- [ ] `fallbackTag` указывает на существующий `TO-...`.
+- [ ] Включён `burstObservatory`, если используете `leastLoad` или `leastPing`.
+- [ ] Нет утечки `privateKey` в публичных репозиториях/скринах.
+
+---
+
+## ✅ Рекомендация для старта
+
+Если вы раньше не работали с балансировкой:
+
+1. Начните с `leastPing`.
+2. Понаблюдайте несколько дней.
+3. Если нагрузка сильно «плавает» — попробуйте `leastLoad`.
+4. Для максимально простого предсказуемого режима — `roundRobin`.
+
+---
+
+## 🧩 Чистый шаблон без комментариев (для вставки)
 
 ```json
 {
-  "remnawave": {
-    "injectHosts": [
-      {
-        "selector": {
-          "type": "remarkRegex",
-          "pattern": "^BAL-"
-        },
-        "tagPrefix": "proxy"
-      }
-    ]
-  },
-  "burstObservatory": {
-    "pingConfig": {
-      "timeout": "3s",
-      "interval": "1m",
-      "sampling": 1,
-      "destination": "http://www.gstatic.com/generate_204",
-      "connectivity": ""
-    },
-    "subjectSelector": ["proxy"]
-  },
-  "dns": {
-    "servers": ["1.1.1.1", "1.0.0.1"],
-    "queryStrategy": "UseIP"
-  },
-  "routing": {
-    "domainMatcher": "hybrid",
-    "domainStrategy": "IPIfNonMatch",
-    "balancers": [
-      {
-        "tag": "main-balancer",
-        "selector": ["proxy"],
-        "strategy": {
-          "type": "leastLoad",
-          "settings": {
-            "maxRTT": "1s",
-            "expected": 2,
-            "baselines": ["1s"],
-            "tolerance": 0.01
-          }
-        },
-        "fallbackTag": "direct"
-      }
-    ],
-    "rules": [
-      {
-        "type": "field",
-        "protocol": ["bittorrent"],
-        "outboundTag": "direct"
-      },
-      {
-        "type": "field",
-        "network": "tcp,udp",
-        "balancerTag": "main-balancer"
-      }
-    ]
+  "log": {
+    "loglevel": "info"
   },
   "inbounds": [
     {
-      "tag": "socks",
-      "port": 10808,
-      "listen": "127.0.0.1",
-      "protocol": "socks",
+      "tag": "BALANCE-ENTRY",
+      "port": 443,
+      "listen": "0.0.0.0",
+      "protocol": "vless",
       "settings": {
-        "udp": true,
-        "auth": "noauth"
+        "clients": [],
+        "decryption": "none"
       },
       "sniffing": {
         "enabled": true,
-        "routeOnly": false,
         "destOverride": ["http", "tls", "quic"]
-      }
-    },
-    {
-      "tag": "http",
-      "port": 10809,
-      "listen": "127.0.0.1",
-      "protocol": "http",
-      "settings": {
-        "allowTransparent": false
       },
-      "sniffing": {
-        "enabled": true,
-        "routeOnly": false,
-        "destOverride": ["http", "tls", "quic"]
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "dest": "REPLACE_DEST_SITE:443",
+          "show": false,
+          "xver": 0,
+          "shortIds": ["REPLACE_WITH_INBOUND_SHORT_ID"],
+          "privateKey": "REPLACE_WITH_INBOUND_PRIVATE_KEY",
+          "serverNames": ["REPLACE_DEST_SITE"]
+        }
       }
     }
   ],
   "outbounds": [
     {
-      "tag": "direct",
+      "tag": "TO-DE-1",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "replace-node-1.example.com",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE_WITH_NODE_UUID",
+                "flow": "xtls-rprx-vision",
+                "level": 0,
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "serverName": "github.com",
+          "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID"
+        }
+      }
+    },
+    {
+      "tag": "DIRECT",
       "protocol": "freedom"
     },
     {
-      "tag": "block",
+      "tag": "BLOCK",
       "protocol": "blackhole"
     }
-  ]
-}
-```
-
-### Что тут важно
-
-- `injectHosts` берёт все хосты с `remark` по шаблону `^BAL-`;
-- `burstObservatory` собирает метрики для группы `proxy`;
-- `leastLoad` выбирает лучший узел по состоянию в моменте;
-- `fallbackTag: direct` спасает в аварийном сценарии;
-- правило `network: tcp,udp` отправляет весь общий трафик в балансировщик.
-
----
-
-## 🔁 Альтернатива 1: равномерное распределение (Round Robin)
-
-Подходит, когда узлы примерно одинаковые и не нужна «умная» оценка качества.
-
-```json
-{
-  "routing": {
-    "balancers": [
-      {
-        "tag": "rr-balancer",
-        "selector": ["proxy"],
-        "strategy": {
-          "type": "roundRobin"
-        },
-        "fallbackTag": "direct"
-      }
-    ],
-    "rules": [
-      {
-        "type": "field",
-        "network": "tcp,udp",
-        "balancerTag": "rr-balancer"
-      }
-    ]
-  }
-}
-```
-
----
-
-## 📉 Альтернатива 2: основной + резервы
-
-Схема, когда есть **main** узел и 2+ backup узла.
-
-```json
-{
-  "remnawave": {
-    "injectHosts": [
-      {
-        "selector": {
-          "type": "uuids",
-          "values": ["UUID-MAIN", "UUID-BACKUP-1", "UUID-BACKUP-2"]
-        },
-        "tagPrefix": "proxy"
-      }
-    ]
+  ],
+  "burstObservatory": {
+    "pingConfig": {
+      "destination": "http://www.gstatic.com/generate_204",
+      "interval": "1m",
+      "sampling": 1,
+      "timeout": "3s",
+      "connectivity": ""
+    },
+    "subjectSelector": ["TO-"]
   },
   "routing": {
-    "domainStrategy": "IPIfNonMatch",
+    "domainStrategy": "AsIs",
     "balancers": [
       {
-        "tag": "backup-balancer",
-        "selector": ["proxy-"],
+        "tag": "MAIN-BALANCER",
+        "selector": ["TO-"],
         "strategy": {
           "type": "leastPing"
         },
-        "fallbackTag": "proxy"
+        "fallbackTag": "TO-DE-1"
       }
     ],
     "rules": [
       {
-        "type": "field",
-        "protocol": ["bittorrent"],
-        "outboundTag": "direct"
+        "domain": ["geosite:category-ads-all"],
+        "outboundTag": "BLOCK"
       },
       {
-        "type": "field",
-        "network": "tcp,udp",
-        "balancerTag": "backup-balancer"
+        "domain": [
+          "regexp:.*\\.ru$",
+          "regexp:.*\\.su$",
+          "regexp:.*\\.xn--p1ai$"
+        ],
+        "outboundTag": "DIRECT"
+      },
+      {
+        "inboundTag": ["BALANCE-ENTRY"],
+        "balancerTag": "MAIN-BALANCER"
       }
     ]
   }
 }
 ```
-
-> Практический смысл: резервы подключаются автоматически при ухудшении канала/недоступности, а `fallbackTag` добавляет последнюю ступень отказоустойчивости.
-
----
-
-## 🧠 Что добавить от себя (best practices)
-
-1. **Смотрите на DNS-часть так же внимательно, как на balancer.**
-   Плохой DNS легко «ломает» ощущение от балансировки, даже если сами узлы быстрые.
-
-2. **Не смешивайте много стратегий сразу в одном правиле.**
-   Лучше один balancer на один сценарий (общий трафик, media-трафик, backup-сценарий).
-
-3. **Держите понятные теги.**
-   Например: `proxy-eu`, `proxy-us`, `proxy-backup` вместо безликих названий.
-
-4. **Проверяйте порядок routing-правил.**
-   Сначала узкие исключения (`bittorrent`, служебные сети), потом общий `balancerTag`.
-
-5. **Начинайте с `roundRobin`, переходите на `leastLoad` по мере роста.**
-   Это простой путь: от минимальной сложности к более адаптивной схеме.
-
----
-
-## 🧾 Короткий чек-лист перед запуском
-
-- [ ] Хосты реально подхватываются через `injectHosts`.
-- [ ] `selector` в `balancers` совпадает с вашими `tagPrefix`.
-- [ ] Есть рабочий `fallbackTag`.
-- [ ] Есть observatory/ping-метрики для стратегий качества (`leastLoad`, `leastPing`).
-- [ ] В `routing.rules` нет конфликта правил по порядку.
-
----
-
-## Итог
-
-Для большинства сценариев Remna хороший старт:
-
-- `injectHosts + tagPrefix` для группировки узлов;
-- `leastLoad` для «умной» балансировки под текущую нагрузку;
-- `fallbackTag` как обязательная страховка;
-- понятные `routing.rules` без пересечений.
-
-Если нужна простая и предсказуемая схема — берите `roundRobin`. Если важнее качество канала в реальном времени — `leastLoad`/`leastPing` + observatory.

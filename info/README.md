@@ -5,7 +5,7 @@
 ## 📚 Материалы
 
 - 🛣️ [Правила маршрутизации Remna](./Правила%20маршрутизации%20Remna.md)
-- ⚖️ [Балансировка remna](./Балансировка%20remna.md)
+- ⚖️ [Конфиг балансировки в Remnawave (leastLoad / leastPing / roundRobin)](./Балансировка%20remna.md)
 - 📘 [Базовые команды Ubuntu 24 для подготовки VPN-ноды](./Базовые%20команды%20Ubuntu%2024%20для%20подготовки%20VPN-ноды.md)
 - 📊 [Мониторинг Beszel — быстрый старт](./Мониторинг%20Beszel%20—%20быстрый%20старт.md)
 - 🔄 [Автоматическая передача файлов между серверами через rsync и SSH](./Автоматическая%20передача%20файлов%20между%20серверами%20через%20rsync%20и%20SSH.md)
@@ -27,3 +27,12 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
 ```
+
+
+---
+
+## 🆕 Новая статья по балансировке Remnawave
+
+- 📘 Пошаговый гайд для новичков: [Конфиг балансировки в Remnawave](./Балансировка%20remna.md)
+- 🧠 Разобраны стратегии: `leastLoad`, `leastPing`, `roundRobin`
+- 🔐 Добавлен обезличенный учебный конфиг (JSONC) + чистый шаблон JSON
