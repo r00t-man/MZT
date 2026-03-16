@@ -44,6 +44,8 @@
 | 📡 **MTProto Proxy** | Установка MTProxy для Telegram | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/tg_mtproxy.sh)` |
 | 🌐 **SOCKS5 Proxy (Dante)** | Менеджер пользователей SOCKS5 | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/Proxy_socks5_dante.sh)` |
 | ☁️ **Cloudflare WARP (remnanode)** | Установка и настройка WARP для remnanode | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/warp-remnanode.sh)` |
+| 📊 **Grafana + Prometheus (Central)** | Центральный сервер мониторинга | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)` |
+| 🛰️ **Node Exporter Agent** | Агент мониторинга для удалённых нод | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)` |
 
 ---
 
@@ -60,6 +62,22 @@
 - 📡 прокси и сетевым сервисам  
 - ☁️ Cloudflare WARP для remnanode
 - 🧹 обслуживанию VPS  
+- 📊 мониторингу серверов через Grafana + Prometheus
+
+### 🆕 Новая статья: Grafana + Prometheus
+
+- 📘 Гайд: [Grafana Prometheus Setup](./my-wiki/Grafana%20Prometheus%20Setup.md)
+- 🚀 Быстрый старт (центральный сервер):
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)
+```
+
+- 🛰️ Быстрый старт (агенты/ноды):
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
+```
 
 ---
 
