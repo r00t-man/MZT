@@ -2,6 +2,7 @@
 
 [![OS Linux](https://img.shields.io/badge/OS-Linux-blue?logo=linux&logoColor=white)](https://www.linux.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)](https://www.docker.com/)
+[![Scripts Count](https://img.shields.io/badge/Scripts-7-success?style=flat-square&logo=gnubash&logoColor=white)](https://github.com/r00t-man/MZT/tree/main/files)
 ![Platform](https://img.shields.io/badge/platform-Linux-lightgrey?style=flat-square&logo=linux)
 ![Tested](https://img.shields.io/badge/tested%20on-Ubuntu%2024.04%20%7C%20Debian%2012-orange?style=flat-square)
 [![License](https://img.shields.io/badge/License-MIT-purple)](LICENSE)
@@ -44,6 +45,8 @@
 | 📡 **MTProto Proxy** | Установка MTProxy для Telegram | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/tg_mtproxy.sh)` |
 | 🌐 **SOCKS5 Proxy (Dante)** | Менеджер пользователей SOCKS5 | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/Proxy_socks5_dante.sh)` |
 | ☁️ **Cloudflare WARP (remnanode)** | Установка и настройка WARP для remnanode | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/warp-remnanode.sh)` |
+| 📊 **Grafana + Prometheus (Central)** | Центральный сервер мониторинга | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)` |
+| 🛰️ **Node Exporter Agent** | Агент мониторинга для удалённых нод | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)` |
 
 ---
 
@@ -60,6 +63,22 @@
 - 📡 прокси и сетевым сервисам  
 - ☁️ Cloudflare WARP для remnanode
 - 🧹 обслуживанию VPS  
+- 📊 мониторингу серверов через Grafana + Prometheus
+
+### 🆕 Новая статья: Grafana + Prometheus
+
+- 📘 Гайд: [Grafana Prometheus Setup](./my-wiki/Grafana%20Prometheus%20Setup.md)
+- 🚀 Быстрый старт (центральный сервер):
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)
+```
+
+- 🛰️ Быстрый старт (агенты/ноды):
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
+```
 
 ---
 
@@ -120,7 +139,9 @@ MZT
 │   ├── control-docker-v5.2-cli.sh
 │   ├── audit-history.sh
 │   ├── tg_mtproxy.sh
-│   └── Proxy_socks5_dante.sh
+│   ├── Proxy_socks5_dante.sh
+│   ├── install_grafana_prometheus.sh
+│   └── install_node_exporter_agent.sh
 │
 ├── help
 │   └── Programms.md
@@ -130,7 +151,8 @@ MZT
 │   ├── Docker control.md
 │   ├── MTProxy_TG.md
 │   ├── WARP-remna.md
-│   └── Ultra Clean VPS.md
+│   ├── Ultra Clean VPS.md
+│   └── Grafana Prometheus Setup.md
 │
 ├── info
 │   ├── README.md
