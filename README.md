@@ -2,6 +2,7 @@
 
 [![OS Linux](https://img.shields.io/badge/OS-Linux-blue?logo=linux&logoColor=white)](https://www.linux.org/)
 [![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)](https://www.docker.com/)
+[![Scripts Count](https://img.shields.io/badge/Scripts-7-success?style=flat-square&logo=gnubash&logoColor=white)](https://github.com/r00t-man/MZT/tree/main/files)
 ![Platform](https://img.shields.io/badge/platform-Linux-lightgrey?style=flat-square&logo=linux)
 ![Tested](https://img.shields.io/badge/tested%20on-Ubuntu%2024.04%20%7C%20Debian%2012-orange?style=flat-square)
 [![License](https://img.shields.io/badge/License-MIT-purple)](LICENSE)
