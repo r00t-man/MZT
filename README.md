@@ -87,7 +87,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 В корне репозитория добавлен раздел **info** с отдельными тематическими статьями:
 
 - 🛣️ Правила маршрутизации Remna
-- ⚖️ Балансировка remna
+- ⚖️ Конфиг балансировки в Remnawave (leastLoad / leastPing / roundRobin)
 - 📘 Базовые команды Ubuntu 24 для подготовки VPN-ноды
 - 🔄 Автоматическая передача файлов между серверами через rsync и SSH
 - 📊 Мониторинг Beszel — быстрый старт
