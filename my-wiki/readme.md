@@ -38,8 +38,8 @@
 | 📡 **Telegram MTProto Proxy** | Установка и настройка MTProxy для Telegram | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/tg_mtproxy.sh)` |
 | 🌐 **SOCKS5 Proxy Manager (Dante)** | Менеджер пользователей SOCKS5 прокси | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/Proxy_socks5_dante.sh)` |
 | 📡 **WARP** | WARP для Remnanode | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/warp-remnanode.sh)` |
-| 📊 **Grafana + Prometheus (Central)** | Центральный сервер мониторинга | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)"` |
-| 🛰️ **Node Exporter Agent** | Агент мониторинга для удалённых нод | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)"` |
+| 📊 **Grafana + Prometheus (Central)** | Центральный сервер мониторинга | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)` |
+| 🛰️ **Node Exporter Agent** | Агент мониторинга для удалённых нод | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)` |
 
 
 ---
@@ -51,13 +51,13 @@
 🚀 **Быстрый старт (центральный сервер):**
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)"
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)
 ```
 
 🛰️ **Быстрый старт (агенты/ноды):**
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)"
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
 ```
 
 # 📂 Навигация (Mini Wiki)

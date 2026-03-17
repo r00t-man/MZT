@@ -29,11 +29,11 @@ VPN-специфичные DNS-сценарии и маскировка траф
 **Быстрый старт (центральный сервер):**
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)"
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)
 ```
 
 **Быстрый старт (агенты/ноды):**
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)"
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
 ```

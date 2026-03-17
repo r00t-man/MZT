@@ -45,8 +45,8 @@
 | 📡 **MTProto Proxy** | Установка MTProxy для Telegram | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/tg_mtproxy.sh)` |
 | 🌐 **SOCKS5 Proxy (Dante)** | Менеджер пользователей SOCKS5 | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/Proxy_socks5_dante.sh)` |
 | ☁️ **Cloudflare WARP (remnanode)** | Установка и настройка WARP для remnanode | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/warp-remnanode.sh)` |
-| 📊 **Grafana + Prometheus (Central)** | Центральный сервер мониторинга | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)"` |
-| 🛰️ **Node Exporter Agent** | Агент мониторинга для удалённых нод | `bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)"` |
+| 📊 **Grafana + Prometheus (Central)** | Центральный сервер мониторинга | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)` |
+| 🛰️ **Node Exporter Agent** | Агент мониторинга для удалённых нод | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)` |
 
 ---
 
@@ -71,13 +71,13 @@
 - 🚀 Быстрый старт (центральный сервер):
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)"
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)
 ```
 
 - 🛰️ Быстрый старт (агенты/ноды):
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)"
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
 ```
 
 ---
@@ -87,7 +87,8 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/
 В корне репозитория добавлен раздел **info** с отдельными тематическими статьями:
 
 - 🛣️ Правила маршрутизации Remna
-- ⚖️ Балансировка remna
+- ⚖️ Конфиг балансировки в Remnawave (leastLoad / leastPing / roundRobin)
+- 📌 Шпаргалка: VLESS → JSON (дополнение к Remna)
 - 📘 Базовые команды Ubuntu 24 для подготовки VPN-ноды
 - 🔄 Автоматическая передача файлов между серверами через rsync и SSH
 - 📊 Мониторинг Beszel — быстрый старт
@@ -158,6 +159,7 @@ MZT
 │   ├── README.md
 │   ├── Автоматическая передача файлов между серверами через rsync и SSH.md
 │   ├── Балансировка remna.md
+│   ├── Шпаргалка VLESS в балансировочный JSON для remna.md
 │   ├── Базовые команды Ubuntu 24 для подготовки VPN-ноды.md
 │   ├── Мониторинг Beszel — быстрый старт.md
 │   └── Правила маршрутизации Remna.md

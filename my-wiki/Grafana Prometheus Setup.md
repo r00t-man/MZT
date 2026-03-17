@@ -18,7 +18,7 @@
 Выполните на центральном сервере:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/<YOUR_REPO>/<YOUR_BRANCH>/files/install_grafana_prometheus.sh)"
 ```
 
 Или локально из репозитория:
@@ -39,7 +39,7 @@ sudo bash files/install_grafana_prometheus.sh
 На **каждой удалённой ноде**, которую нужно мониторить, запустите:
 
 ```bash
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)"
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/<YOUR_REPO>/<YOUR_BRANCH>/files/install_node_exporter_agent.sh)"
 ```
 
 Или локально из репозитория:
