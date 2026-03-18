@@ -88,55 +88,58 @@
 
 ---
 
-## 🛠️ Обезличенный учебный конфиг с комментариями (JSON)
+## 🛠️ Обезличенный учебный конфиг с комментариями — именно для `roundRobin`
 
-> ⚠️ Важно: обычный JSON **не поддерживает комментарии**.
-> Этот блок нужен для чтения/обучения. Перед вставкой в рабочий Xray/Remnawave удалите комментарии.
+> Ниже — **учебный обезличенный пример**, собранный по мотивам реальной схемы балансировщика.
+> Все чувствительные данные заменены на заглушки: UUID, ключи, shortId, адреса серверов и маскирующие домены.
+>
+> ⚠️ Важно: это блок **для чтения и понимания логики**. Он специально дан **не как чистый JSON**, а как учебный шаблон с комментариями.
+> Перед вставкой в рабочий конфиг уберите комментарии и подставьте свои значения.
 
-```jsonc
+```
 {
   "log": {
-    // Уровень логов: info / warning / error / debug
+    // Базовый уровень логирования: для старта обычно достаточно info
     "loglevel": "info"
   },
 
   "inbounds": [
     {
-      // Имя входящего подключения (используется в routing.rules.inboundTag)
-      "tag": "BALANCE-ENTRY",
-
-      // Порт приёма клиентов
+      // Тег входа балансировщика.
+      // Именно на него потом ссылается routing.rules[].inboundTag
+      "tag": "BALANCER-IN",
       "port": 443,
       "listen": "0.0.0.0",
       "protocol": "vless",
-
       "settings": {
-        // В Remnawave клиенты часто управляются отдельно
+        // В Remnawave список клиентов часто ведётся отдельно
         "clients": [],
         "decryption": "none"
       },
-
       "sniffing": {
         "enabled": true,
-        "destOverride": ["http", "tls", "quic"]
+        "destOverride": [
+          "http",
+          "tls",
+          "quic"
+        ]
       },
-
       "streamSettings": {
-        // Для Reality TCP — network=raw
         "network": "raw",
         "security": "reality",
-
         "realitySettings": {
-          // Домен-маска (доступный HTTPS-сайт)
-          "dest": "REPLACE_DEST_SITE:443",
+          // Маскирующий HTTPS-ресурс для входа
+          "dest": "cover.example.com:443",
           "show": false,
           "xver": 0,
-
-          // shortId и privateKey ИМЕННО этого входного сервера
-          "shortIds": ["REPLACE_WITH_INBOUND_SHORT_ID"],
-          "privateKey": "REPLACE_WITH_INBOUND_PRIVATE_KEY",
-
-          "serverNames": ["REPLACE_DEST_SITE"]
+          // Это параметры именно входного Reality на балансировщике
+          "shortIds": [
+            "REPLACE_WITH_BALANCER_SHORT_ID"
+          ],
+          "privateKey": "REPLACE_WITH_BALANCER_PRIVATE_KEY",
+          "serverNames": [
+            "cover.example.com"
+          ]
         }
       }
     }
@@ -144,17 +147,17 @@
 
   "outbounds": [
     {
-      // Удалённая нода №1
+      // Нода №1
       "tag": "TO-DE-1",
       "protocol": "vless",
       "settings": {
         "vnext": [
           {
-            "address": "replace-node-1.example.com",
+            "address": "de-node-1.example.net",
             "port": 443,
             "users": [
               {
-                "id": "REPLACE_WITH_NODE_UUID",
+                "id": "REPLACE_WITH_SHARED_OR_NODE_UUID",
                 "flow": "xtls-rprx-vision",
                 "level": 0,
                 "encryption": "none"
@@ -167,25 +170,24 @@
         "network": "raw",
         "security": "reality",
         "realitySettings": {
-          "serverName": "github.com",
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID",
           "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
-          "shortId": "REPLACE_WITH_NODE_SHORT_ID"
+          "serverName": "github.com"
         }
       }
     },
-
     {
-      // Удалённая нода №2
+      // Нода №2
       "tag": "TO-PL-1",
       "protocol": "vless",
       "settings": {
         "vnext": [
           {
-            "address": "replace-node-2.example.com",
+            "address": "pl-node-1.example.net",
             "port": 443,
             "users": [
               {
-                "id": "REPLACE_WITH_NODE_UUID",
+                "id": "REPLACE_WITH_SHARED_OR_NODE_UUID",
                 "flow": "xtls-rprx-vision",
                 "level": 0,
                 "encryption": "none"
@@ -198,25 +200,24 @@
         "network": "raw",
         "security": "reality",
         "realitySettings": {
-          "serverName": "github.com",
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID",
           "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
-          "shortId": "REPLACE_WITH_NODE_SHORT_ID"
+          "serverName": "github.com"
         }
       }
     },
-
     {
-      // Удалённая нода №3
+      // Нода №3
       "tag": "TO-EE-1",
       "protocol": "vless",
       "settings": {
         "vnext": [
           {
-            "address": "replace-node-3.example.com",
+            "address": "ee-node-1.example.net",
             "port": 443,
             "users": [
               {
-                "id": "REPLACE_WITH_NODE_UUID",
+                "id": "REPLACE_WITH_SHARED_OR_NODE_UUID",
                 "flow": "xtls-rprx-vision",
                 "level": 0,
                 "encryption": "none"
@@ -229,25 +230,24 @@
         "network": "raw",
         "security": "reality",
         "realitySettings": {
-          "serverName": "github.com",
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID",
           "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
-          "shortId": "REPLACE_WITH_NODE_SHORT_ID"
+          "serverName": "github.com"
         }
       }
     },
-
     {
-      // Удалённая нода №4
+      // Нода №4
       "tag": "TO-NL-1",
       "protocol": "vless",
       "settings": {
         "vnext": [
           {
-            "address": "replace-node-4.example.com",
+            "address": "nl-node-1.example.net",
             "port": 443,
             "users": [
               {
-                "id": "REPLACE_WITH_NODE_UUID",
+                "id": "REPLACE_WITH_SHARED_OR_NODE_UUID",
                 "flow": "xtls-rprx-vision",
                 "level": 0,
                 "encryption": "none"
@@ -260,76 +260,135 @@
         "network": "raw",
         "security": "reality",
         "realitySettings": {
-          "serverName": "github.com",
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID",
           "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
-          "shortId": "REPLACE_WITH_NODE_SHORT_ID"
+          "serverName": "github.com"
         }
       }
     },
-
     {
-      // Прямой выход с балансировочного сервера
+      // Дополнительная нода, если хотите расширить пул
+      "tag": "TO-DE-2",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "de-node-2.example.net",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE_WITH_SHARED_OR_NODE_UUID",
+                "flow": "xtls-rprx-vision",
+                "level": 0,
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID",
+          "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
+          "serverName": "github.com"
+        }
+      }
+    },
+    {
+      // Отдельная резервная нода, не входящая в selector TO-
+      "tag": "YA-BACKUP",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "backup-node.example.net",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE_WITH_BACKUP_UUID",
+                "flow": "xtls-rprx-vision",
+                "level": 0,
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "shortId": "REPLACE_WITH_BACKUP_SHORT_ID",
+          "publicKey": "REPLACE_WITH_BACKUP_PUBLIC_KEY",
+          "serverName": "cover.example.com"
+        }
+      }
+    },
+    {
       "tag": "DIRECT",
       "protocol": "freedom"
     },
     {
-      // Блокировка трафика
       "tag": "BLOCK",
       "protocol": "blackhole"
     }
   ],
 
-  "burstObservatory": {
-    "pingConfig": {
-      // Хост для проверок доступности
-      "destination": "http://www.gstatic.com/generate_204",
-      "interval": "1m",
-      "sampling": 1,
-      "timeout": "3s",
-      "connectivity": ""
-    },
-    // Собираем метрики по outbound-тегам TO-
-    "subjectSelector": ["TO-"]
-  },
-
   "routing": {
-    "domainStrategy": "AsIs",
-
-    "balancers": [
-      {
-        "tag": "MAIN-BALANCER",
-        "selector": ["TO-"],
-        "strategy": {
-          // Варианты: leastLoad / leastPing / roundRobin
-          "type": "leastPing"
-        },
-
-        // Резервная нода (должна существовать в outbounds - ниже пояснение)
-        "fallbackTag": "TO-DE-1"
-      }
-    ],
-
     "rules": [
       {
-        "domain": ["geosite:category-ads-all"],
+        // Рекламные домены сразу режем
+        "domain": [
+          "geosite:category-ads-all"
+        ],
         "outboundTag": "BLOCK"
       },
       {
+        // Локальные/нужные домены можно пустить напрямую мимо балансировщика
         "domain": [
-          "regexp:.*\\.ru$",
-          "regexp:.*\\.su$",
-          "regexp:.*\\.xn--p1ai$"
+          "regexp:.*\.ru$",
+          "regexp:.*\.su$",
+          "regexp:.*\.xn--p1ai$"
         ],
         "outboundTag": "DIRECT"
       },
       {
-        "inboundTag": ["BALANCE-ENTRY"],
+        // Всё, что пришло на балансировочный inbound,
+        // отправляем в balancer MAIN-BALANCER
+        "inboundTag": [
+          "BALANCER-IN"
+        ],
         "balancerTag": "MAIN-BALANCER"
       }
-    ]
+    ],
+    "balancers": [
+      {
+        "tag": "MAIN-BALANCER",
+        // В пул попадают все outbound с тегом, начинающимся на TO-
+        "selector": [
+          "TO-"
+        ],
+        "strategy": {
+          // Для roundRobin ноды выбираются строго по кругу
+          "type": "roundRobin"
+        },
+        // Отдельный резерв на случай проблем с основным пулом
+        "fallbackTag": "YA-BACKUP"
+      }
+    ],
+    "domainStrategy": "AsIs"
   }
 }
 ```
+
+### Что важно именно для `roundRobin`
+
+- `burstObservatory` и замеры ping **не обязательны**, потому что стратегия не ориентируется на latency.
+- В балансировку попадут **только** те `outbound`, чьи теги подходят под `selector`, то есть начинаются с `TO-`.
+- `fallbackTag` удобно держать отдельным, чтобы резервная нода не участвовала в обычном цикле round robin.
+- Если хотите, чтобы резерв тоже участвовал в круге, дайте ему тег вида `TO-...` и не выносите его в отдельный `fallbackTag`.
 
 Тут подробнее отдельная статья [Резервная нода (должна существовать в outbounds)](https://github.com/r00t-man/MZT/blob/main/info/%D0%9F%D1%80%D0%B8%D0%BC%D0%B5%D1%87%D0%B0%D0%BD%D0%B8%D0%B5%20%D0%BA%20%D0%B1%D0%B0%D0%BB%D0%B0%D0%BD%D1%81%D0%B8%D1%80%D0%BE%D0%B2%D0%BA%D0%B5%20remna%20%E2%80%94%20%D1%80%D0%B5%D0%B7%D0%B5%D1%80%D0%B2%20%D0%B4%D0%BB%D1%8F%20%D0%AF%D0%BD%D0%B4%D0%B5%D0%BA%D1%81-%D0%BD%D0%BE%D0%B4%D1%8B.md)
 
@@ -353,7 +412,7 @@
 
 Это данные **самого балансировочного сервера**:
 
-- `tag` — любое понятное имя (например, `BALANCE-ENTRY`)
+- `tag` — любое понятное имя (например, `BALANCER-IN`)
 - `port` — обычно `443`
 - `dest` — сайт для маскировки (`github.com:443` и т.п.)
 - `shortIds` — shortId этого входного Reality
@@ -395,7 +454,8 @@
    - `publicKey`
    - `shortId`
 3. Убедитесь, что `tag` начинается с `TO-` (иначе селектор `"TO-"` её не подхватит).
-4. Проверьте, что `fallbackTag` указывает на реально существующий тег.
+4. Если используете отдельный резерв, проверьте, что `fallbackTag` указывает на реально существующий тег.
+5. Для `roundRobin` убедитесь, что все нужные ноды попадают под `selector` (например, имеют префикс `TO-`).
 
 ---
 
@@ -403,8 +463,8 @@
 
 - [ ] Конфиг валидируется без ошибок синтаксиса.
 - [ ] В `outbounds` есть минимум 2 ноды с тегом `TO-...`.
-- [ ] `fallbackTag` указывает на существующий `TO-...`.
-- [ ] Включён `burstObservatory`, если используете `leastLoad` или `leastPing`.
+- [ ] `fallbackTag` указывает на существующий тег, если вы используете резерв.
+- [ ] `burstObservatory` включён только если используете `leastLoad` или `leastPing`; для `roundRobin` он не нужен.
 - [ ] Нет утечки `privateKey` в публичных репозиториях/скринах.
 
 ---
@@ -413,23 +473,23 @@
 
 Если вы раньше не работали с балансировкой:
 
-1. Начните с `leastPing`.
-2. Понаблюдайте несколько дней.
-3. Если нагрузка сильно «плавает» — попробуйте `leastLoad`.
-4. Для максимально простого предсказуемого режима — `roundRobin`.
+1. Если нужен самый простой и предсказуемый режим — начните с `roundRobin`.
+2. Если позже захотите выбирать ноду по качеству канала — переходите на `leastPing`.
+3. Если нагрузка сильно «плавает» — пробуйте `leastLoad`.
+4. После любой смены стратегии проверьте маршрутизацию и логи.
 
 ---
 
 ## 🧩 Чистый шаблон без комментариев (для вставки)
 
-```json
+```
 {
   "log": {
     "loglevel": "info"
   },
   "inbounds": [
     {
-      "tag": "BALANCE-ENTRY",
+      "tag": "BALANCER-IN",
       "port": 443,
       "listen": "0.0.0.0",
       "protocol": "vless",
@@ -445,12 +505,12 @@
         "network": "raw",
         "security": "reality",
         "realitySettings": {
-          "dest": "REPLACE_DEST_SITE:443",
+          "dest": "cover.example.com:443",
           "show": false,
           "xver": 0,
-          "shortIds": ["REPLACE_WITH_INBOUND_SHORT_ID"],
-          "privateKey": "REPLACE_WITH_INBOUND_PRIVATE_KEY",
-          "serverNames": ["REPLACE_DEST_SITE"]
+          "shortIds": ["REPLACE_WITH_BALANCER_SHORT_ID"],
+          "privateKey": "REPLACE_WITH_BALANCER_PRIVATE_KEY",
+          "serverNames": ["cover.example.com"]
         }
       }
     }
@@ -462,11 +522,11 @@
       "settings": {
         "vnext": [
           {
-            "address": "replace-node-1.example.com",
+            "address": "de-node-1.example.net",
             "port": 443,
             "users": [
               {
-                "id": "REPLACE_WITH_NODE_UUID",
+                "id": "REPLACE_WITH_SHARED_OR_NODE_UUID",
                 "flow": "xtls-rprx-vision",
                 "level": 0,
                 "encryption": "none"
@@ -479,9 +539,96 @@
         "network": "raw",
         "security": "reality",
         "realitySettings": {
-          "serverName": "github.com",
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID",
           "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
-          "shortId": "REPLACE_WITH_NODE_SHORT_ID"
+          "serverName": "github.com"
+        }
+      }
+    },
+    {
+      "tag": "TO-PL-1",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "pl-node-1.example.net",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE_WITH_SHARED_OR_NODE_UUID",
+                "flow": "xtls-rprx-vision",
+                "level": 0,
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID",
+          "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
+          "serverName": "github.com"
+        }
+      }
+    },
+    {
+      "tag": "TO-EE-1",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "ee-node-1.example.net",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE_WITH_SHARED_OR_NODE_UUID",
+                "flow": "xtls-rprx-vision",
+                "level": 0,
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "shortId": "REPLACE_WITH_NODE_SHORT_ID",
+          "publicKey": "REPLACE_WITH_NODE_PUBLIC_KEY",
+          "serverName": "github.com"
+        }
+      }
+    },
+    {
+      "tag": "YA-BACKUP",
+      "protocol": "vless",
+      "settings": {
+        "vnext": [
+          {
+            "address": "backup-node.example.net",
+            "port": 443,
+            "users": [
+              {
+                "id": "REPLACE_WITH_BACKUP_UUID",
+                "flow": "xtls-rprx-vision",
+                "level": 0,
+                "encryption": "none"
+              }
+            ]
+          }
+        ]
+      },
+      "streamSettings": {
+        "network": "raw",
+        "security": "reality",
+        "realitySettings": {
+          "shortId": "REPLACE_WITH_BACKUP_SHORT_ID",
+          "publicKey": "REPLACE_WITH_BACKUP_PUBLIC_KEY",
+          "serverName": "cover.example.com"
         }
       }
     },
@@ -494,16 +641,6 @@
       "protocol": "blackhole"
     }
   ],
-  "burstObservatory": {
-    "pingConfig": {
-      "destination": "http://www.gstatic.com/generate_204",
-      "interval": "1m",
-      "sampling": 1,
-      "timeout": "3s",
-      "connectivity": ""
-    },
-    "subjectSelector": ["TO-"]
-  },
   "routing": {
     "domainStrategy": "AsIs",
     "balancers": [
@@ -511,9 +648,9 @@
         "tag": "MAIN-BALANCER",
         "selector": ["TO-"],
         "strategy": {
-          "type": "leastPing"
+          "type": "roundRobin"
         },
-        "fallbackTag": "TO-DE-1"
+        "fallbackTag": "YA-BACKUP"
       }
     ],
     "rules": [
@@ -523,14 +660,14 @@
       },
       {
         "domain": [
-          "regexp:.*\\.ru$",
-          "regexp:.*\\.su$",
-          "regexp:.*\\.xn--p1ai$"
+          "regexp:.*\.ru$",
+          "regexp:.*\.su$",
+          "regexp:.*\.xn--p1ai$"
         ],
         "outboundTag": "DIRECT"
       },
       {
-        "inboundTag": ["BALANCE-ENTRY"],
+        "inboundTag": ["BALANCER-IN"],
         "balancerTag": "MAIN-BALANCER"
       }
     ]
