@@ -1,6 +1,6 @@
 # 🐳 Control Docker CLI v5.2 
 
-Интерактивный CLI-инструмент для удобного управления Docker прямо из терминала.
+Интерактивный CLI-инструмент для удобного управления Docker прямо из терминала через отдельную команду `mondoc`.
 
 Скрипт позволяет управлять контейнерами, логами, compose-проектами, volumes, networks и Docker-ресурсами через простое текстовое меню.
 
@@ -9,7 +9,7 @@
 
 ## 📥 Скачать
 
-👉 [Скачать control-docker-v5.2-cli.sh](https://raw.githubusercontent.com/r00t-man/MZT/3ab93f22126c46616201e07f37572848f9848f02/files/control-docker-v5.2-cli.sh)
+👉 [Скачать dockermon.sh](https://raw.githubusercontent.com/r00t-man/MZT/3ab93f22126c46616201e07f37572848f9848f02/files/dockermon.sh)
 
 Либо сразу на сервере
 
@@ -18,9 +18,9 @@
 ```bash
 sudo mkdir -p /opt/control-docker/log
 cd /opt/control-docker
-sudo wget -O /opt/control-docker/control-docker-v5.2-cli.sh https://raw.githubusercontent.com/r00t-man/MZT/3ab93f22126c46616201e07f37572848f9848f02/files/control-docker-v5.2-cli.sh
-sudo chmod +x /opt/control-docker/control-docker-v5.2-cli.sh
-sudo ln -sf /opt/control-docker/control-docker-v5.2-cli.sh /usr/local/bin/control-docker
+sudo wget -O /opt/control-docker/dockermon.sh https://raw.githubusercontent.com/r00t-man/MZT/3ab93f22126c46616201e07f37572848f9848f02/files/dockermon.sh
+sudo chmod +x /opt/control-docker/dockermon.sh
+sudo ln -sf /opt/control-docker/dockermon.sh /usr/local/bin/mondoc
 hash -r
 ```
 
@@ -170,7 +170,7 @@ sudo mkdir -p /opt/control-docker/log
 Скопируй файл скрипта в:
 
 ```
-/opt/control-docker/control-docker-v5.2-cli.sh
+/opt/control-docker/dockermon.sh
 ```
 
 ---
@@ -178,17 +178,17 @@ sudo mkdir -p /opt/control-docker/log
 ## 4️⃣ Сделать скрипт исполняемым
 
 ```bash
-sudo chmod +x /opt/control-docker/control-docker-v5.2-cli.sh
+sudo chmod +x /opt/control-docker/dockermon.sh
 ```
 
 ---
 
-## 5️⃣ Создать глобальную команду
+## 5️⃣ Создать команду `mondoc`
 
-Чтобы запускать скрипт одной командой:
+Чтобы запускать скрипт отдельной командой без конфликта с Docker:
 
 ```bash
-sudo ln -sf /opt/control-docker/control-docker-v5.2-cli.sh /usr/local/bin/control-docker
+sudo ln -sf /opt/control-docker/dockermon.sh /usr/local/bin/mondoc
 ```
 
 ---
@@ -202,7 +202,19 @@ hash -r
 ### Зачем нужен `hash -r`
 
 Bash кэширует пути к командам.
-После создания новой команды (`control-docker`) нужно очистить этот кеш, чтобы оболочка увидела новую команду.
+После создания новой команды (`mondoc`) полезно очистить этот кеш, чтобы оболочка увидела изменения сразу.
+
+---
+
+# ▶️ Проверка установки
+
+Проверь, что команда доступна в системе:
+
+```bash
+mondoc --help
+```
+
+Если всё установлено правильно, команда покажет краткую справку и не будет конфликтовать с реальным Docker CLI.
 
 ---
 
@@ -211,7 +223,7 @@ Bash кэширует пути к командам.
 После установки скрипт можно запускать так:
 
 ```bash
-control-docker
+mondoc
 ```
 
 Откроется интерактивное CLI-меню.
@@ -280,10 +292,16 @@ Ctrl+C
 
 ```
 /opt/control-docker
- ├─ control-docker-v5.2-cli.sh
+ ├─ dockermon.sh
  └─ log/
       container-name/
            log-files
+```
+
+Глобальная команда будет доступна через путь:
+
+```
+/usr/local/bin/mondoc
 ```
 
 ---
