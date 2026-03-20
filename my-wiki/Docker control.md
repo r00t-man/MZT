@@ -183,12 +183,22 @@ sudo chmod +x /opt/control-docker/dockermon.sh
 
 ---
 
+<<<<<<< codex/update-control-docker-script-to-docker-control-yg4v09
 ## 5️⃣ Создать команду `mondoc`
 
 Чтобы запускать скрипт отдельной командой без конфликта с Docker:
 
 ```bash
 sudo ln -sf /opt/control-docker/dockermon.sh /usr/local/bin/mondoc
+=======
+## 5️⃣ Подключить команду `docker control`
+
+Чтобы запускать скрипт как подкоманду Docker:
+
+```bash
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo ln -sf /opt/control-docker/control-docker-v5.2-cli.sh /usr/local/lib/docker/cli-plugins/docker-control
+>>>>>>> main
 ```
 
 ---
@@ -202,6 +212,7 @@ hash -r
 ### Зачем нужен `hash -r`
 
 Bash кэширует пути к командам.
+<<<<<<< codex/update-control-docker-script-to-docker-control-yg4v09
 После создания новой команды (`mondoc`) полезно очистить этот кеш, чтобы оболочка увидела изменения сразу.
 
 ---
@@ -215,6 +226,9 @@ mondoc --help
 ```
 
 Если всё установлено правильно, команда покажет краткую справку и не будет конфликтовать с реальным Docker CLI.
+=======
+После подключения новой подкоманды (`docker control`) полезно очистить этот кеш, чтобы оболочка увидела изменения сразу.
+>>>>>>> main
 
 ---
 
@@ -223,7 +237,11 @@ mondoc --help
 После установки скрипт можно запускать так:
 
 ```bash
+<<<<<<< codex/update-control-docker-script-to-docker-control-yg4v09
 mondoc
+=======
+docker control
+>>>>>>> main
 ```
 
 Откроется интерактивное CLI-меню.
@@ -298,10 +316,17 @@ Ctrl+C
            log-files
 ```
 
+<<<<<<< codex/update-control-docker-script-to-docker-control-yg4v09
 Глобальная команда будет доступна через путь:
 
 ```
 /usr/local/bin/mondoc
+=======
+CLI plugin Docker будет подключён через путь:
+
+```
+/usr/local/lib/docker/cli-plugins/docker-control
+>>>>>>> main
 ```
 
 ---

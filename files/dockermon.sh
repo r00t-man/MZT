@@ -1,4 +1,26 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="/opt/control-docker"
+APP_SCRIPT="$APP_DIR/dockermon.sh"
+BIN_LINK="/usr/local/bin/dockermon"
+
+OLD_BIN_LINKS=(
+  "/usr/local/bin/control-docker"
+  "/usr/bin/control-docker"
+  "/bin/control-docker"
+)
+
+OLD_PLUGIN_PATHS=(
+  "/usr/local/lib/docker/cli-plugins/docker-control"
+  "/usr/local/libexec/docker/cli-plugins/docker-control"
+  "$HOME/.docker/cli-plugins/docker-control"
+)
+
+mkdir -p "$APP_DIR"
+
+cat > "$APP_SCRIPT" <<'EOF'
+#!/usr/bin/env bash
 
 set -u
 export TERM="${TERM:-xterm}"
@@ -48,14 +70,14 @@ check_requirements() {
 }
 
 print_docker_cli_plugin_metadata() {
-  cat <<'EOF'
+  cat <<'META'
 {
   "SchemaVersion": "0.1.0",
   "Vendor": "r00t-man",
   "Version": "5.2",
   "ShortDescription": "Интерактивное управление Docker из терминала"
 }
-EOF
+META
 }
 
 handle_special_args() {
@@ -65,21 +87,14 @@ handle_special_args() {
       exit 0
       ;;
     --help|-h)
-      cat <<'EOF'
-Control Docker CLI v5.2
+      cat <<'HELP'
+Dockermon v5.2
 
 Запуск:
-  control-docker-v5.2-cli.sh
-<<<<<<< codex/update-control-docker-script-to-docker-control-yg4v09
-  mondoc
+  dockermon
 
-Рекомендуемый способ запуска — через отдельную команду `mondoc`, чтобы не конфликтовать с системным Docker CLI.
-=======
-  docker control
-
-При запуске через Docker CLI plugin скрипт открывает интерактивное меню управления Docker.
->>>>>>> main
-EOF
+При запуске открывает интерактивное меню управления Docker.
+HELP
       exit 0
       ;;
   esac
@@ -178,7 +193,7 @@ clear_screen() {
 
   clear
   echo -e "${CYAN}============================================================${NC}"
-  echo -e "${CYAN}              CONTROL DOCKER MANAGER v5.2 CLI               ${NC}"
+  echo -e "${CYAN}                  DOCKERMON MANAGER v5.2                    ${NC}"
   echo -e "${CYAN}============================================================${NC}"
   echo -e "${BOLD}Раздел      :${NC} $title"
   echo -e "${BOLD}Описание    :${NC} $desc"
@@ -1168,3 +1183,32 @@ main() {
 }
 
 main "$@"
+EOF
+
+chmod +x "$APP_SCRIPT"
+
+for old_path in "${OLD_BIN_LINKS[@]}"; do
+  if [ -e "$old_path" ] || [ -L "$old_path" ]; then
+    rm -f "$old_path"
+    echo "Удалена старая команда: $old_path"
+  fi
+done
+
+for old_plugin in "${OLD_PLUGIN_PATHS[@]}"; do
+  eval expanded_path="$old_plugin"
+  if [ -e "$expanded_path" ] || [ -L "$expanded_path" ]; then
+    rm -f "$expanded_path"
+    echo "Удалён старый docker plugin: $expanded_path"
+  fi
+done
+
+ln -sf "$APP_SCRIPT" "$BIN_LINK"
+chmod +x "$BIN_LINK"
+
+hash -r 2>/dev/null || true
+
+echo
+echo "Установка завершена."
+echo "Новая команда: dockermon"
+echo "Основной файл: $APP_SCRIPT"
+echo "Симлинк:       $BIN_LINK"
