@@ -1,6 +1,6 @@
 # 🐳 Control Docker CLI v5.2 
 
-Интерактивный CLI-инструмент для удобного управления Docker прямо из терминала через команду `docker control`.
+Интерактивный CLI-инструмент для удобного управления Docker прямо из терминала через отдельную команду `mondoc`.
 
 Скрипт позволяет управлять контейнерами, логами, compose-проектами, volumes, networks и Docker-ресурсами через простое текстовое меню.
 
@@ -9,7 +9,7 @@
 
 ## 📥 Скачать
 
-👉 [Скачать control-docker-v5.2-cli.sh](https://raw.githubusercontent.com/r00t-man/MZT/3ab93f22126c46616201e07f37572848f9848f02/files/control-docker-v5.2-cli.sh)
+👉 [Скачать dockermon.sh](https://raw.githubusercontent.com/r00t-man/MZT/3ab93f22126c46616201e07f37572848f9848f02/files/dockermon.sh)
 
 Либо сразу на сервере
 
@@ -18,10 +18,9 @@
 ```bash
 sudo mkdir -p /opt/control-docker/log
 cd /opt/control-docker
-sudo wget -O /opt/control-docker/control-docker-v5.2-cli.sh https://raw.githubusercontent.com/r00t-man/MZT/3ab93f22126c46616201e07f37572848f9848f02/files/control-docker-v5.2-cli.sh
-sudo chmod +x /opt/control-docker/control-docker-v5.2-cli.sh
-sudo mkdir -p /usr/local/lib/docker/cli-plugins
-sudo ln -sf /opt/control-docker/control-docker-v5.2-cli.sh /usr/local/lib/docker/cli-plugins/docker-control
+sudo wget -O /opt/control-docker/dockermon.sh https://raw.githubusercontent.com/r00t-man/MZT/3ab93f22126c46616201e07f37572848f9848f02/files/dockermon.sh
+sudo chmod +x /opt/control-docker/dockermon.sh
+sudo ln -sf /opt/control-docker/dockermon.sh /usr/local/bin/mondoc
 hash -r
 ```
 
@@ -171,7 +170,7 @@ sudo mkdir -p /opt/control-docker/log
 Скопируй файл скрипта в:
 
 ```
-/opt/control-docker/control-docker-v5.2-cli.sh
+/opt/control-docker/dockermon.sh
 ```
 
 ---
@@ -179,11 +178,19 @@ sudo mkdir -p /opt/control-docker/log
 ## 4️⃣ Сделать скрипт исполняемым
 
 ```bash
-sudo chmod +x /opt/control-docker/control-docker-v5.2-cli.sh
+sudo chmod +x /opt/control-docker/dockermon.sh
 ```
 
 ---
 
+<<<<<<< codex/update-control-docker-script-to-docker-control-yg4v09
+## 5️⃣ Создать команду `mondoc`
+
+Чтобы запускать скрипт отдельной командой без конфликта с Docker:
+
+```bash
+sudo ln -sf /opt/control-docker/dockermon.sh /usr/local/bin/mondoc
+=======
 ## 5️⃣ Подключить команду `docker control`
 
 Чтобы запускать скрипт как подкоманду Docker:
@@ -191,6 +198,7 @@ sudo chmod +x /opt/control-docker/control-docker-v5.2-cli.sh
 ```bash
 sudo mkdir -p /usr/local/lib/docker/cli-plugins
 sudo ln -sf /opt/control-docker/control-docker-v5.2-cli.sh /usr/local/lib/docker/cli-plugins/docker-control
+>>>>>>> main
 ```
 
 ---
@@ -204,7 +212,23 @@ hash -r
 ### Зачем нужен `hash -r`
 
 Bash кэширует пути к командам.
+<<<<<<< codex/update-control-docker-script-to-docker-control-yg4v09
+После создания новой команды (`mondoc`) полезно очистить этот кеш, чтобы оболочка увидела изменения сразу.
+
+---
+
+# ▶️ Проверка установки
+
+Проверь, что команда доступна в системе:
+
+```bash
+mondoc --help
+```
+
+Если всё установлено правильно, команда покажет краткую справку и не будет конфликтовать с реальным Docker CLI.
+=======
 После подключения новой подкоманды (`docker control`) полезно очистить этот кеш, чтобы оболочка увидела изменения сразу.
+>>>>>>> main
 
 ---
 
@@ -213,7 +237,11 @@ Bash кэширует пути к командам.
 После установки скрипт можно запускать так:
 
 ```bash
+<<<<<<< codex/update-control-docker-script-to-docker-control-yg4v09
+mondoc
+=======
 docker control
+>>>>>>> main
 ```
 
 Откроется интерактивное CLI-меню.
@@ -282,16 +310,23 @@ Ctrl+C
 
 ```
 /opt/control-docker
- ├─ control-docker-v5.2-cli.sh
+ ├─ dockermon.sh
  └─ log/
       container-name/
            log-files
 ```
 
+<<<<<<< codex/update-control-docker-script-to-docker-control-yg4v09
+Глобальная команда будет доступна через путь:
+
+```
+/usr/local/bin/mondoc
+=======
 CLI plugin Docker будет подключён через путь:
 
 ```
 /usr/local/lib/docker/cli-plugins/docker-control
+>>>>>>> main
 ```
 
 ---

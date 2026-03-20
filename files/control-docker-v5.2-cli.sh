@@ -70,9 +70,15 @@ Control Docker CLI v5.2
 
 Запуск:
   control-docker-v5.2-cli.sh
+<<<<<<< codex/update-control-docker-script-to-docker-control-yg4v09
+  mondoc
+
+Рекомендуемый способ запуска — через отдельную команду `mondoc`, чтобы не конфликтовать с системным Docker CLI.
+=======
   docker control
 
 При запуске через Docker CLI plugin скрипт открывает интерактивное меню управления Docker.
+>>>>>>> main
 EOF
       exit 0
       ;;
