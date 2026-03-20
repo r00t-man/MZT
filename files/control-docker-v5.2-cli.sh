@@ -47,6 +47,38 @@ check_requirements() {
   fi
 }
 
+print_docker_cli_plugin_metadata() {
+  cat <<'EOF'
+{
+  "SchemaVersion": "0.1.0",
+  "Vendor": "r00t-man",
+  "Version": "5.2",
+  "ShortDescription": "Интерактивное управление Docker из терминала"
+}
+EOF
+}
+
+handle_special_args() {
+  case "${1:-}" in
+    docker-cli-plugin-metadata)
+      print_docker_cli_plugin_metadata
+      exit 0
+      ;;
+    --help|-h)
+      cat <<'EOF'
+Control Docker CLI v5.2
+
+Запуск:
+  control-docker-v5.2-cli.sh
+  mondoc
+
+Рекомендуемый способ запуска — через отдельную команду `mondoc`, чтобы не конфликтовать с системным Docker CLI.
+EOF
+      exit 0
+      ;;
+  esac
+}
+
 pause_console() {
   echo
   read -r -p "Нажмите Enter для продолжения..."
@@ -1124,8 +1156,9 @@ main_menu() {
 }
 
 main() {
+  handle_special_args "${1:-}"
   check_requirements
   main_menu
 }
 
-main
+main "$@"
