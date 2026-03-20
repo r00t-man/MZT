@@ -92,6 +92,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 - 📘 Базовые команды Ubuntu 24 для подготовки VPN-ноды
 - 🔄 Автоматическая передача файлов между серверами через rsync и SSH
 - 📊 Мониторинг Beszel — быстрый старт
+- 🤖 Docker-контейнер с Telegram-ботом через Xray proxy
 
 👉 https://github.com/r00t-man/MZT/tree/main/info
 
