@@ -43,7 +43,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 
 Если после базового hardening сервера нужен удобный инструмент для повседневной работы с Docker, смотри отдельную статью:
 
-- 📘 [Dockermon — интерактивное управление Docker из терминала](../info/Dockermon%20—%20интерактивное%20управление%20Docker%20из%20терминала.md)
+- 📘 [Dockermon — интерактивное управление Docker из терминала](../my-wiki/Dockermon%20—%20интерактивное%20управление%20Docker%20из%20терминала.md)
 
 **Установка в одну команду:**
 
