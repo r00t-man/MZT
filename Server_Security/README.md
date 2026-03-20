@@ -37,3 +37,16 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
 ```
+---
+
+## 🐳 Полезный инструмент для администрирования Docker
+
+Если после базового hardening сервера нужен удобный инструмент для повседневной работы с Docker, смотри отдельную статью:
+
+- 📘 [Dockermon — интерактивное управление Docker из терминала](../my-wiki/Dockermon%20—%20интерактивное%20управление%20Docker%20из%20терминала.md)
+
+**Установка в одну команду:**
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/dockermon.sh)
+```

@@ -40,7 +40,7 @@
 | Script | Description | Install |
 |------|------|------|
 | 🧹 **Ultra Clean VPS** | Очистка и оптимизация сервера | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/Ultra_Clean_VPS.sh)` |
-| 🐳 **Docker Control** | Управление Docker контейнерами | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/control-docker-v5.2-cli.sh)` |
+| 🐳 **Dockermon** | Интерактивный Docker-менеджер с отдельной командой `dockermon` | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/dockermon.sh)` |
 | 🔐 **Audit History** | Логирование команд Linux | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/audit-history.sh)` |
 | 📡 **MTProto Proxy** | Установка MTProxy для Telegram | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/tg_mtproxy.sh)` |
 | 🌐 **SOCKS5 Proxy (Dante)** | Менеджер пользователей SOCKS5 | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/Proxy_socks5_dante.sh)` |
@@ -64,6 +64,23 @@
 - ☁️ Cloudflare WARP для remnanode
 - 🧹 обслуживанию VPS  
 - 📊 мониторингу серверов через Grafana + Prometheus
+
+### 🆕 Новая статья: Dockermon
+
+- 📘 Гайд: [Dockermon — интерактивное управление Docker из терминала](./my-wiki/Dockermon%20—%20интерактивное%20управление%20Docker%20из%20терминала.md)
+- 🚀 Установка в одну команду:
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/dockermon.sh)
+```
+
+- ▶️ Запуск после установки:
+
+```bash
+dockermon
+```
+
+---
 
 ### 🆕 Новая статья: Grafana + Prometheus
 
@@ -138,7 +155,7 @@ MZT
 │
 ├── files
 │   ├── Ultra_Clean_VPS.sh
-│   ├── control-docker-v5.2-cli.sh
+│   ├── dockermon.sh
 │   ├── audit-history.sh
 │   ├── tg_mtproxy.sh
 │   ├── Proxy_socks5_dante.sh
@@ -151,6 +168,7 @@ MZT
 ├── my-wiki
 │   ├── Audit-history.md
 │   ├── Docker control.md
+│   ├── Dockermon — интерактивное управление Docker из терминала.md
 │   ├── MTProxy_TG.md
 │   ├── WARP-remna.md
 │   ├── Ultra Clean VPS.md

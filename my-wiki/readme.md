@@ -33,7 +33,7 @@
 | Script | Description | Install |
 |------|------|------|
 | 🧹 **Ultra Clean VPS** | Глубокая очистка и оптимизация VPS | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/Ultra_Clean_VPS.sh)` |
-| 🐳 **Docker Control CLI** | Интерактивное управление Docker контейнерами | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/control-docker-v5.2-cli.sh)` |
+| 🐳 **Dockermon** | Новая интерактивная команда `dockermon` для управления Docker | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/dockermon.sh)` |
 | 🔐 **Audit History** | Логирование всех команд пользователей Linux | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/audit-history.sh)` |
 | 📡 **Telegram MTProto Proxy** | Установка и настройка MTProxy для Telegram | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/tg_mtproxy.sh)` |
 | 🌐 **SOCKS5 Proxy Manager (Dante)** | Менеджер пользователей SOCKS5 прокси | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/Proxy_socks5_dante.sh)` |
@@ -43,6 +43,22 @@
 
 
 ---
+
+## 🆕 Новая статья: Dockermon
+
+📘 Краткая инструкция: [Dockermon — интерактивное управление Docker из терминала](./Dockermon%20—%20интерактивное%20управление%20Docker%20из%20терминала.md)
+
+🚀 **Установка в одну команду:**
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/dockermon.sh)
+```
+
+▶️ **Запуск после установки:**
+
+```bash
+dockermon
+```
 
 ## 🆕 Новая статья: Grafana + Prometheus
 
@@ -67,7 +83,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 | Раздел             | Описание                         |
 | ------------------ | -------------------------------- |
 | 📜 Audit History   | Логирование команд пользователей |
-| 🐳 Docker Control  | Управление Docker через CLI      |
+| 🐳 Dockermon       | Интерактивное управление Docker  |
 | 📡 MTProto Proxy   | Развёртывание прокси Telegram    |
 | 🧹 Ultra Clean VPS | Очистка и оптимизация сервера    |
 | 📡 WARP | WARP для Remnanode |
@@ -92,20 +108,20 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 
 ---
 
-## 🐳 Docker Control
+## 🐳 Dockermon
 
-CLI-скрипт для **быстрого управления Docker контейнерами**.
+Интерактивный CLI-скрипт для **удобного управления Docker из терминала**.
 
 Функции:
 
-* просмотр контейнеров
-* перезапуск сервисов
-* очистка Docker
-* управление образами
+* просмотр контейнеров и фильтрация
+* работа с логами и диагностикой
+* compose-проекты, images, volumes, networks
+* очистка Docker и экспорт диагностики
 
 🔗 Инструкция
 
-[https://github.com/r00t-man/MZT/blob/main/my-wiki/Docker%20control.md](https://github.com/r00t-man/MZT/blob/main/my-wiki/Docker%20control.md)
+[https://github.com/r00t-man/MZT/blob/main/my-wiki/Dockermon%20%E2%80%94%20%D0%B8%D0%BD%D1%82%D0%B5%D1%80%D0%B0%D0%BA%D1%82%D0%B8%D0%B2%D0%BD%D0%BE%D0%B5%20%D1%83%D0%BF%D1%80%D0%B0%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5%20Docker%20%D0%B8%D0%B7%20%D1%82%D0%B5%D1%80%D0%BC%D0%B8%D0%BD%D0%B0%D0%BB%D0%B0.md](https://github.com/r00t-man/MZT/blob/main/my-wiki/Dockermon%20%E2%80%94%20%D0%B8%D0%BD%D1%82%D0%B5%D1%80%D0%B0%D0%BA%D1%82%D0%B8%D0%B2%D0%BD%D0%BE%D0%B5%20%D1%83%D0%BF%D1%80%D0%B0%D0%B2%D0%BB%D0%B5%D0%BD%D0%B8%D0%B5%20Docker%20%D0%B8%D0%B7%20%D1%82%D0%B5%D1%80%D0%BC%D0%B8%D0%BD%D0%B0%D0%BB%D0%B0.md)
 
 ---
 
