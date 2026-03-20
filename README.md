@@ -110,6 +110,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 - 🔄 Автоматическая передача файлов между серверами через rsync и SSH
 - 📊 Мониторинг Beszel — быстрый старт
 - 🤖 Docker-контейнер с Telegram-ботом через Xray proxy
+- 🐳 Dockermon — интерактивное управление Docker из терминала
 
 👉 https://github.com/r00t-man/MZT/tree/main/info
 
@@ -167,7 +168,6 @@ MZT
 │
 ├── my-wiki
 │   ├── Audit-history.md
-│   ├── Docker control.md
 │   ├── Dockermon — интерактивное управление Docker из терминала.md
 │   ├── MTProxy_TG.md
 │   ├── WARP-remna.md
@@ -181,6 +181,7 @@ MZT
 │   ├── Шпаргалка VLESS в балансировочный JSON для remna.md
 │   ├── Базовые команды Ubuntu 24 для подготовки VPN-ноды.md
 │   ├── Мониторинг Beszel — быстрый старт.md
+│   ├── Dockermon — интерактивное управление Docker из терминала.md
 │   └── Правила маршрутизации Remna.md
 │
 ├── Server_Security
