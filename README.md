@@ -41,6 +41,7 @@
 |------|------|------|
 | 🧹 **Ultra Clean VPS** | Очистка и оптимизация сервера | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/Ultra_Clean_VPS.sh)` |
 | 🐳 **Docker Control** | Управление Docker контейнерами | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/control-docker-v5.2-cli.sh)` |
+| 🐳 **Dockermon** | Интерактивный Docker-менеджер с отдельной командой `dockermon` | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/dockermon.sh)` |
 | 🔐 **Audit History** | Логирование команд Linux | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/audit-history.sh)` |
 | 📡 **MTProto Proxy** | Установка MTProxy для Telegram | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/tg_mtproxy.sh)` |
 | 🌐 **SOCKS5 Proxy (Dante)** | Менеджер пользователей SOCKS5 | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/Proxy_socks5_dante.sh)` |
@@ -93,6 +94,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 - 🔄 Автоматическая передача файлов между серверами через rsync и SSH
 - 📊 Мониторинг Beszel — быстрый старт
 - 🤖 Docker-контейнер с Telegram-ботом через Xray proxy
+- 🐳 Dockermon — интерактивное управление Docker из терминала
 
 👉 https://github.com/r00t-man/MZT/tree/main/info
 
@@ -139,6 +141,7 @@ MZT
 ├── files
 │   ├── Ultra_Clean_VPS.sh
 │   ├── control-docker-v5.2-cli.sh
+│   ├── dockermon.sh
 │   ├── audit-history.sh
 │   ├── tg_mtproxy.sh
 │   ├── Proxy_socks5_dante.sh
@@ -163,6 +166,7 @@ MZT
 │   ├── Шпаргалка VLESS в балансировочный JSON для remna.md
 │   ├── Базовые команды Ubuntu 24 для подготовки VPN-ноды.md
 │   ├── Мониторинг Beszel — быстрый старт.md
+│   ├── Dockermon — интерактивное управление Docker из терминала.md
 │   └── Правила маршрутизации Remna.md
 │
 ├── Server_Security

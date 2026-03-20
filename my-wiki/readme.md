@@ -34,6 +34,7 @@
 |------|------|------|
 | 🧹 **Ultra Clean VPS** | Глубокая очистка и оптимизация VPS | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/Ultra_Clean_VPS.sh)` |
 | 🐳 **Docker Control CLI** | Интерактивное управление Docker контейнерами | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/control-docker-v5.2-cli.sh)` |
+| 🐳 **Dockermon** | Новая интерактивная команда `dockermon` для управления Docker | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/dockermon.sh)` |
 | 🔐 **Audit History** | Логирование всех команд пользователей Linux | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/audit-history.sh)` |
 | 📡 **Telegram MTProto Proxy** | Установка и настройка MTProxy для Telegram | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/tg_mtproxy.sh)` |
 | 🌐 **SOCKS5 Proxy Manager (Dante)** | Менеджер пользователей SOCKS5 прокси | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/Proxy_socks5_dante.sh)` |
@@ -43,6 +44,22 @@
 
 
 ---
+
+## 🆕 Новая статья: Dockermon
+
+📘 Краткая инструкция: [Dockermon — интерактивное управление Docker из терминала](../info/Dockermon%20—%20интерактивное%20управление%20Docker%20из%20терминала.md)
+
+🚀 **Установка в одну команду:**
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/dockermon.sh)
+```
+
+▶️ **Запуск после установки:**
+
+```bash
+dockermon
+```
 
 ## 🆕 Новая статья: Grafana + Prometheus
 
