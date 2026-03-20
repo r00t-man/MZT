@@ -1,6 +1,6 @@
 # 🐳 Control Docker CLI v5.2 
 
-Интерактивный CLI-инструмент для удобного управления Docker прямо из терминала.
+Интерактивный CLI-инструмент для удобного управления Docker прямо из терминала через команду `docker control`.
 
 Скрипт позволяет управлять контейнерами, логами, compose-проектами, volumes, networks и Docker-ресурсами через простое текстовое меню.
 
@@ -20,7 +20,8 @@ sudo mkdir -p /opt/control-docker/log
 cd /opt/control-docker
 sudo wget -O /opt/control-docker/control-docker-v5.2-cli.sh https://raw.githubusercontent.com/r00t-man/MZT/3ab93f22126c46616201e07f37572848f9848f02/files/control-docker-v5.2-cli.sh
 sudo chmod +x /opt/control-docker/control-docker-v5.2-cli.sh
-sudo ln -sf /opt/control-docker/control-docker-v5.2-cli.sh /usr/local/bin/control-docker
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo ln -sf /opt/control-docker/control-docker-v5.2-cli.sh /usr/local/lib/docker/cli-plugins/docker-control
 hash -r
 ```
 
@@ -183,12 +184,13 @@ sudo chmod +x /opt/control-docker/control-docker-v5.2-cli.sh
 
 ---
 
-## 5️⃣ Создать глобальную команду
+## 5️⃣ Подключить команду `docker control`
 
-Чтобы запускать скрипт одной командой:
+Чтобы запускать скрипт как подкоманду Docker:
 
 ```bash
-sudo ln -sf /opt/control-docker/control-docker-v5.2-cli.sh /usr/local/bin/control-docker
+sudo mkdir -p /usr/local/lib/docker/cli-plugins
+sudo ln -sf /opt/control-docker/control-docker-v5.2-cli.sh /usr/local/lib/docker/cli-plugins/docker-control
 ```
 
 ---
@@ -202,7 +204,7 @@ hash -r
 ### Зачем нужен `hash -r`
 
 Bash кэширует пути к командам.
-После создания новой команды (`control-docker`) нужно очистить этот кеш, чтобы оболочка увидела новую команду.
+После подключения новой подкоманды (`docker control`) полезно очистить этот кеш, чтобы оболочка увидела изменения сразу.
 
 ---
 
@@ -211,7 +213,7 @@ Bash кэширует пути к командам.
 После установки скрипт можно запускать так:
 
 ```bash
-control-docker
+docker control
 ```
 
 Откроется интерактивное CLI-меню.
@@ -284,6 +286,12 @@ Ctrl+C
  └─ log/
       container-name/
            log-files
+```
+
+CLI plugin Docker будет подключён через путь:
+
+```
+/usr/local/lib/docker/cli-plugins/docker-control
 ```
 
 ---
