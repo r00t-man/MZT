@@ -40,6 +40,7 @@
 | 📡 **WARP** | WARP для Remnanode | `bash <(curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/main/files/warp-remnanode.sh)` |
 | 📊 **Grafana + Prometheus (Central)** | Центральный сервер мониторинга | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)` |
 | 🛰️ **Node Exporter Agent** | Агент мониторинга для удалённых нод | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)` |
+| 🖥️ **Start SSH MOTD** | Красивый MOTD с метриками сервера и Docker | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server-stat-modt.sh)` |
 
 
 ---
@@ -76,6 +77,21 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
 ```
 
+
+## 🆕 Новая статья: Start SSH MOTD
+
+📘 Инструкция: [Start SSH MOTD](./Start_SSH_motd.md)
+
+🚀 **Установка в одну команду:**
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server-stat-modt.sh)
+```
+
+🖼️ **После входа по SSH:**
+
+Показывает uptime, boot time, failed units, нагрузку CPU, RAM, диск, сеть и состояние Docker.
+
 # 📂 Навигация (Mini Wiki)
 
 > Репозиторий можно использовать как **мини-вики по администрированию Linux серверов**
@@ -87,6 +103,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 | 📡 MTProto Proxy   | Развёртывание прокси Telegram    |
 | 🧹 Ultra Clean VPS | Очистка и оптимизация сервера    |
 | 📡 WARP | WARP для Remnanode |
+| 🖥️ Start SSH MOTD | Красивый SSH MOTD со статусом сервера |
 
 ---
 
@@ -172,6 +189,24 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 🔗 Инструкция
 
 [https://github.com/r00t-man/MZT/blob/main/my-wiki/WARP-remna.md](https://github.com/r00t-man/MZT/blob/main/my-wiki/WARP-remna.md)
+
+
+---
+
+## 🖥️ Start SSH MOTD
+
+Скрипт для настройки **кастомного MOTD при входе по SSH**.
+
+Функции:
+
+* показывает uptime, reboot required и failed units
+* рисует шкалы нагрузки CPU, RAM и диска
+* выводит сетевые параметры и DNS
+* показывает краткий статус Docker
+
+🔗 Инструкция
+
+[https://github.com/r00t-man/MZT/blob/main/my-wiki/Start_SSH_motd.md](https://github.com/r00t-man/MZT/blob/main/my-wiki/Start_SSH_motd.md)
 
 ---
 

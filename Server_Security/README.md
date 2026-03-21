@@ -50,3 +50,18 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/dockermon.sh)
 ```
+
+
+---
+
+## 🖥️ Полезный SSH-инструмент
+
+- 📘 [Start SSH MOTD](../my-wiki/Start_SSH_motd.md)
+
+**Установка в одну команду:**
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server-stat-modt.sh)
+```
+
+Показывает красивый MOTD при входе по SSH: uptime, загрузку, диск, сеть, systemd и Docker.

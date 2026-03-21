@@ -41,3 +41,18 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 - 📌 Дополнение: [Шпаргалка VLESS → балансировочный JSON](./Шпаргалка%20VLESS%20в%20балансировочный%20JSON%20для%20remna.md)
 - 🧠 Разобраны стратегии: `leastLoad`, `leastPing`, `roundRobin`
 - 🔐 Добавлен обезличенный учебный конфиг (JSONC) + чистый шаблон JSON
+
+
+---
+
+## 🖥️ Полезный SSH-инструмент
+
+- 📘 [Start SSH MOTD](../my-wiki/Start_SSH_motd.md)
+
+**Установка в одну команду:**
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server-stat-modt.sh)
+```
+
+Показывает красивый MOTD при входе по SSH: uptime, загрузку, диск, сеть, systemd и Docker.
