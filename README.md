@@ -47,6 +47,7 @@
 | ☁️ **Cloudflare WARP (remnanode)** | Установка и настройка WARP для remnanode | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/warp-remnanode.sh)` |
 | 📊 **Grafana + Prometheus (Central)** | Центральный сервер мониторинга | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)` |
 | 🛰️ **Node Exporter Agent** | Агент мониторинга для удалённых нод | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)` |
+| 🖥️ **Start SSH MOTD** | Красивый MOTD с метриками сервера и Docker | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server-stat-modt.sh)` |
 
 ---
 
@@ -64,6 +65,7 @@
 - ☁️ Cloudflare WARP для remnanode
 - 🧹 обслуживанию VPS  
 - 📊 мониторингу серверов через Grafana + Prometheus
+- 🖥️ кастомному SSH MOTD с быстрым обзором состояния сервера
 
 ### 🆕 Новая статья: Dockermon
 
@@ -96,6 +98,19 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/instal
 ```bash
 bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
 ```
+
+---
+
+### 🆕 Новая статья: Start SSH MOTD
+
+- 📘 Гайд: [Start SSH MOTD](./my-wiki/Start_SSH_motd.md)
+- 🚀 Установка в одну команду:
+
+```bash
+bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server-stat-modt.sh)
+```
+
+- 🖼️ После установки при входе по SSH показывается сводка по uptime, нагрузке, памяти, диску, сети и Docker.
 
 ---
 
@@ -161,7 +176,8 @@ MZT
 │   ├── tg_mtproxy.sh
 │   ├── Proxy_socks5_dante.sh
 │   ├── install_grafana_prometheus.sh
-│   └── install_node_exporter_agent.sh
+│   ├── install_node_exporter_agent.sh
+│   └── server-stat-modt.sh
 │
 ├── help
 │   └── Programms.md
@@ -172,7 +188,8 @@ MZT
 │   ├── MTProxy_TG.md
 │   ├── WARP-remna.md
 │   ├── Ultra Clean VPS.md
-│   └── Grafana Prometheus Setup.md
+│   ├── Grafana Prometheus Setup.md
+│   └── Start_SSH_motd.md
 │
 ├── info
 │   ├── README.md
