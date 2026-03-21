@@ -294,7 +294,7 @@ print_metric_plain "$GREEN"   "Iface:"           "$DEFAULT_IFACE"
 print_metric_plain "$GREEN"   "IPv4:"            "$IPV4_WITH_GW"
 print_metric_plain "$PURPLE"  "IPv6:"            "$IPV6"
 print_metric_plain "$CYAN"    "Local DNS:"       "$DNS_SERVERS"
-print_metric_plain "$CYAN"    "Iface DNS:"       "$PUBLIC_DNS"
+print_metric_plain "$CYAN"    "Public DNS:"       "$PUBLIC_DNS"
 
 print_metric_plain "$YELLOW"  "Docker links:"    "$DOCKER_LINKS_VAL"
 print_metric_plain "$YELLOW"  "Containers:"      "$DOCKER_CONTAINERS_VAL"
