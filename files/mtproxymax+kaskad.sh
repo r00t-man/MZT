@@ -1,0 +1,7593 @@
+#!/bin/bash
+# ═══════════════════════════════════════════════════════════════
+#  MTProxy_Max+SNI v2.0 — Telegram Proxy Manager
+#  Вайб коддинг рулит и GiS
+#  https://github.com/r00t-man/MZT
+#
+# ═══════════════════════════════════════════════════════════════
+set -eo pipefail
+export LC_NUMERIC=C
+
+# ── Section 1: Initialization ────────────────────────────────
+VERSION="1.0.3-ru-kaskad"
+SCRIPT_NAME="mtproxymax"
+INSTALL_DIR="/opt/mtproxymax"
+CONFIG_DIR="${INSTALL_DIR}/mtproxy"
+SETTINGS_FILE="${INSTALL_DIR}/settings.conf"
+SECRETS_FILE="${INSTALL_DIR}/secrets.conf"
+STATS_DIR="${INSTALL_DIR}/relay_stats"
+UPSTREAMS_FILE="${INSTALL_DIR}/upstreams.conf"
+BACKUP_DIR="${INSTALL_DIR}/backups"
+CONNECTION_LOG="${INSTALL_DIR}/connection.log"
+INSTANCES_FILE="${INSTALL_DIR}/instances.conf"
+CONTAINER_NAME="mtproxymax"
+
+# nftables / Kaskad
+NFT_CONF="/etc/nftables.conf"
+NFT_NAT_TABLE="ip nat"
+NFT_FILTER_TABLE="inet filter"
+NFT_KASKAD_COMMENT="tg_mtproxy_kaskad"
+DOCKER_IMAGE_BASE="mtproxymax-telemt"
+TELEMT_MIN_VERSION="3.3.32"
+TELEMT_COMMIT="a383efc"  # Pinned: v3.3.32 — hybrid loop, ArcSwap snapshots, ME decomposition
+GITHUB_REPO="SamNet-dev/MTProxyMax"
+REGISTRY_IMAGE="ghcr.io/samnet-dev/mtproxymax-telemt"
+
+# Bash version check
+if [ "${BASH_VERSINFO[0]:-0}" -lt 4 ]; then
+    echo "ERROR: MTProxyMax requires bash 4.2+. Current: ${BASH_VERSION:-unknown}" >&2
+    exit 1
+fi
+
+# Temp file tracking
+declare -a _TEMP_FILES=()
+_cleanup() {
+    for f in "${_TEMP_FILES[@]}"; do
+        rm -f "$f" 2>/dev/null
+    done
+}
+trap _cleanup EXIT
+
+_mktemp() {
+    local dir="${1:-${TMPDIR:-/tmp}}"
+    local tmp
+    tmp=$(mktemp "${dir}/.mtproxymax.XXXXXX") || return 1
+    chmod 600 "$tmp"
+    _TEMP_FILES+=("$tmp")
+    echo "$tmp"
+}
+
+# ── Section 2: Constants & Defaults ──────────────────────────
+
+# Colors
+readonly RED='\033[0;31m'
+readonly GREEN='\033[0;32m'
+readonly YELLOW='\033[0;33m'
+readonly BLUE='\033[0;34m'
+readonly MAGENTA='\033[0;35m'
+readonly CYAN='\033[0;36m'
+readonly WHITE='\033[1;37m'
+readonly BOLD='\033[1m'
+readonly DIM='\033[2m'
+readonly ITALIC='\033[3m'
+readonly UNDERLINE='\033[4m'
+readonly BLINK='\033[5m'
+readonly REVERSE='\033[7m'
+readonly NC='\033[0m'
+
+# Bright colors for retro feel
+readonly BRIGHT_GREEN='\033[1;32m'
+readonly BRIGHT_CYAN='\033[1;36m'
+readonly BRIGHT_YELLOW='\033[1;33m'
+readonly BRIGHT_RED='\033[1;31m'
+readonly BRIGHT_MAGENTA='\033[1;35m'
+readonly BRIGHT_WHITE='\033[1;37m'
+readonly BG_BLACK='\033[40m'
+readonly BG_BLUE='\033[44m'
+
+# Box drawing
+readonly BOX_TL='┌' BOX_TR='┐' BOX_BL='└' BOX_BR='┘'
+readonly BOX_H='─' BOX_V='│' BOX_LT='├' BOX_RT='┤'
+readonly BOX_DTL='╔' BOX_DTR='╗' BOX_DBL='╚' BOX_DBR='╝'
+readonly BOX_DH='═' BOX_DV='║' BOX_DLT='╠' BOX_DRT='╣'
+
+# Status symbols
+readonly SYM_OK='●'
+readonly SYM_ARROW='►'
+readonly SYM_UP='↑'
+readonly SYM_DOWN='↓'
+readonly SYM_CHECK='✓'
+readonly SYM_CROSS='✗'
+readonly SYM_WARN='!'
+readonly SYM_STAR='★'
+
+# Default configuration
+PROXY_PORT=443
+PROXY_METRICS_PORT=9090
+PROXY_DOMAIN="cloudflare.com"
+PROXY_CONCURRENCY=8192
+PROXY_CPUS=""
+PROXY_MEMORY=""
+CUSTOM_IP=""
+FAKE_CERT_LEN=2048
+PROXY_PROTOCOL="false"
+PROXY_PROTOCOL_TRUSTED_CIDRS=""
+AD_TAG=""
+GEOBLOCK_MODE="blacklist"
+BLOCKLIST_COUNTRIES=""
+MASKING_ENABLED="true"
+MASKING_HOST=""
+MASKING_PORT=443
+TELEGRAM_ENABLED="false"
+TELEGRAM_BOT_TOKEN=""
+TELEGRAM_CHAT_ID=""
+TELEGRAM_INTERVAL=6
+TELEGRAM_ALERTS_ENABLED="true"
+TELEGRAM_SERVER_LABEL="MTProxyMax"
+AUTO_UPDATE_ENABLED="true"
+
+# Terminal width
+TERM_WIDTH=$(tput cols 2>/dev/null || echo 60)
+[ "$TERM_WIDTH" -gt 80 ] && TERM_WIDTH=80
+[ "$TERM_WIDTH" -lt 40 ] && TERM_WIDTH=60
+
+# ── Section 3: TUI Drawing Functions ────────────────────────
+
+# Get string display length (strips ANSI escape codes)
+_strlen() {
+    local clean="$1"
+    local esc=$'\033'
+    # Normalize literal \033 (from single-quoted color vars) to real ESC byte
+    clean="${clean//$'\\033'/$esc}"
+    # Strip ANSI escape sequences in pure bash (no subprocesses)
+    while [[ "$clean" == *"${esc}["* ]]; do
+        local before="${clean%%${esc}\[*}"
+        local rest="${clean#*${esc}\[}"
+        local after="${rest#*m}"
+        [ "$rest" = "$after" ] && break
+        clean="${before}${after}"
+    done
+    echo "${#clean}"
+}
+
+# Repeat a character n times (pure bash, no subprocesses)
+_repeat() {
+    local char="$1" count="$2" str
+    printf -v str '%*s' "$count" ''
+    printf '%s' "${str// /$char}"
+}
+
+# Draw a horizontal line
+draw_line() {
+    local width="${1:-$TERM_WIDTH}" char="${2:-$BOX_H}" color="${3:-$DIM}"
+    echo -e "${color}$(_repeat "$char" "$width")${NC}"
+}
+
+# Draw top border of a box
+draw_box_top() {
+    local width="${1:-$TERM_WIDTH}"
+    local inner=$((width - 2))
+    echo -e "${CYAN}${BOX_TL}$(_repeat "$BOX_H" "$inner")${BOX_TR}${NC}"
+}
+
+# Draw bottom border of a box
+draw_box_bottom() {
+    local width="${1:-$TERM_WIDTH}"
+    local inner=$((width - 2))
+    echo -e "${CYAN}${BOX_BL}$(_repeat "$BOX_H" "$inner")${BOX_BR}${NC}"
+}
+
+# Draw separator in a box
+draw_box_sep() {
+    local width="${1:-$TERM_WIDTH}"
+    local inner=$((width - 2))
+    echo -e "${CYAN}${BOX_LT}$(_repeat "$BOX_H" "$inner")${BOX_RT}${NC}"
+}
+
+# Draw a line inside a box with auto-padding
+draw_box_line() {
+    local text="$1" width="${2:-$TERM_WIDTH}"
+    local inner=$((width - 2))
+    local text_len
+    text_len=$(_strlen "$text")
+    local padding=$((inner - text_len - 1))
+    [ "$padding" -lt 0 ] && padding=0
+    echo -e "${CYAN}${BOX_V}${NC} ${text}$(_repeat ' ' "$padding")${CYAN}${BOX_V}${NC}"
+}
+
+# Draw an empty line inside a box
+draw_box_empty() {
+    local width="${1:-$TERM_WIDTH}"
+    draw_box_line "" "$width"
+}
+
+# Draw a centered line inside a box
+draw_box_center() {
+    local text="$1" width="${2:-$TERM_WIDTH}"
+    local inner=$((width - 2))
+    local text_len
+    text_len=$(_strlen "$text")
+    local left_pad=$(( (inner - text_len) / 2 ))
+    local right_pad=$((inner - text_len - left_pad))
+    [ "$left_pad" -lt 0 ] && left_pad=0
+    [ "$right_pad" -lt 0 ] && right_pad=0
+    echo -e "${CYAN}${BOX_V}${NC}$(_repeat ' ' "$left_pad")${text}$(_repeat ' ' "$right_pad")${CYAN}${BOX_V}${NC}"
+}
+
+# Draw section header with retro styling
+draw_header() {
+    local title="$1"
+    echo ""
+    echo -e "  ${BRIGHT_CYAN}${SYM_ARROW} ${BOLD}${title}${NC}"
+    echo -e "  ${DIM}$(_repeat '─' $((${#title} + 2)))${NC}"
+}
+
+# Draw a status indicator
+draw_status() {
+    local status="$1" label="${2:-}"
+    case "$status" in
+        running|up|true|enabled|active)
+            echo -e "${BRIGHT_GREEN}${SYM_OK}${NC} ${GREEN}${label:-ЗАПУЩЕН}${NC}" ;;
+        stopped|down|false|disabled|inactive)
+            echo -e "${BRIGHT_RED}${SYM_OK}${NC} ${RED}${label:-ОСТАНОВЛЕН}${NC}" ;;
+        starting|pending|warning)
+            echo -e "${BRIGHT_YELLOW}${SYM_OK}${NC} ${YELLOW}${label:-ЗАПУСК}${NC}" ;;
+        *)
+            echo -e "${DIM}${SYM_OK}${NC} ${DIM}${label:-НЕИЗВЕСТНО}${NC}" ;;
+    esac
+}
+
+# Draw a progress bar
+draw_progress() {
+    local current="$1" total="$2" width="${3:-20}" label="${4:-}"
+    local filled empty pct
+    if [ "$total" -gt 0 ] 2>/dev/null; then
+        pct=$(( (current * 100) / total ))
+        filled=$(( (current * width) / total ))
+    else
+        pct=0
+        filled=0
+    fi
+    [ "$filled" -gt "$width" ] && filled=$width
+    empty=$((width - filled))
+
+    local bar_color="$GREEN"
+    [ "$pct" -ge 70 ] && bar_color="$YELLOW"
+    [ "$pct" -ge 90 ] && bar_color="$RED"
+
+    local bar="${bar_color}$(_repeat '█' "$filled")${DIM}$(_repeat '░' "$empty")${NC}"
+    if [ -n "$label" ]; then
+        echo -e "  ${label} [${bar}] ${pct}%"
+    else
+        echo -e "  [${bar}] ${pct}%"
+    fi
+}
+
+# Draw a sparkline from array of values
+draw_sparkline() {
+    local -a values=("$@")
+    local chars=('▁' '▂' '▃' '▄' '▅' '▆' '▇' '█')
+    local max=0
+    for v in "${values[@]}"; do
+        [ "$v" -gt "$max" ] 2>/dev/null && max=$v
+    done
+    [ "$max" -eq 0 ] && max=1
+
+    local result=""
+    for v in "${values[@]}"; do
+        local idx=$(( (v * 7) / max ))
+        [ "$idx" -gt 7 ] && idx=7
+        result+="${chars[$idx]}"
+    done
+    echo -e "${BRIGHT_CYAN}${result}${NC}"
+}
+
+# Prompt for menu choice with retro styling
+read_choice() {
+    local prompt="${1:-choice}"
+    local default="${2:-}"
+    # Drain any stale input (e.g., leftover escape-sequence bytes)
+    read -rsn 256 -t 0.05 _ 2>/dev/null || true
+    echo -en "\n  ${DIM}Введите ${prompt,,}${NC}" >&2
+    [ -n "$default" ] && echo -en " ${DIM}[${default}]${NC}" >&2
+    echo -en "${DIM}:${NC} " >&2
+    local choice
+    read -r choice
+    [ -z "$choice" ] && choice="$default"
+    echo "$choice"
+}
+
+# Typing effect for retro banner
+typing_effect() {
+    local text="$1" delay="${2:-0.01}"
+    local i
+    for (( i=0; i<${#text}; i++ )); do
+        echo -n "${text:$i:1}"
+        sleep "$delay" 2>/dev/null || true
+    done
+    echo ""
+}
+
+# Press any key prompt
+press_any_key() {
+    echo ""
+    echo -en "  ${DIM}Нажмите любую клавишу для продолжения...${NC}"
+    read -rsn1
+    # Drain leftover bytes from multi-byte keys (arrow/function keys send escape sequences)
+    read -rsn 256 -t 0.05 _ 2>/dev/null || true
+    echo ""
+}
+
+# Clear screen and show mini header
+clear_screen() {
+    clear 2>/dev/null || printf '\033[2J\033[H'
+    echo -e "${BRIGHT_CYAN}${BOLD}  MTProxyMax${NC} ${DIM}v${VERSION}${NC}"
+    echo -e "  ${DIM}$(_repeat '─' 30)${NC}"
+}
+
+# Show the big ASCII banner
+show_banner() {
+    echo -e "${BRIGHT_CYAN}"
+    cat << 'BANNER_ART'
+
+███╗   ███╗████████╗██████╗ ██████╗  ██████╗
+████╗ ████║╚══██╔══╝██╔══██╗██╔══██╗██╔═══██╗
+██╔████╔██║   ██║   ██████╔╝██████╔╝██║   ██║
+██║╚██╔╝██║   ██║   ██╔═══╝ ██╔══██╗██║   ██║
+██║ ╚═╝ ██║   ██║   ██║     ██║  ██║╚██████╔╝
+╚═╝     ╚═╝   ╚═╝   ╚═╝     ╚═╝  ╚═╝ ╚═════╝
+
+BANNER_ART
+
+    cat << BANNER
+╔══════════════ MTProxy_Max+SNI v2.0 ══════════════╗
+║        Telegram Proxy Manager                    ║
+║        Вайб коддинг рулит и GiS 😎               ║
+║        github.com/r00t-man/MZT                   ║
+╚══════════════════════════════════════════════════╝
+BANNER
+
+    echo -e "${NC}"
+}
+
+# ── Section 4: Utility Functions ─────────────────────────────
+
+log_info()    { echo -e "  ${BLUE}[i]${NC} $1"; }
+log_success() { echo -e "  ${GREEN}[${SYM_CHECK}]${NC} $1"; }
+log_warn()    { echo -e "  ${YELLOW}[${SYM_WARN}]${NC} $1" >&2; }
+log_error()   { echo -e "  ${RED}[${SYM_CROSS}]${NC} $1" >&2; }
+
+# Format bytes to human-readable
+format_bytes() {
+    local bytes=$1
+    [[ "$bytes" =~ ^[0-9]+$ ]] || bytes=0
+    if [ -z "$bytes" ] || [ "$bytes" = "0" ]; then
+        echo "0 B"
+        return
+    fi
+    if [ "$bytes" -lt 1024 ] 2>/dev/null; then
+        echo "${bytes} B"
+    elif [ "$bytes" -lt 1048576 ] 2>/dev/null; then
+        echo "$(awk -v b="$bytes" 'BEGIN {printf "%.1f", b/1024}') KB"
+    elif [ "$bytes" -lt 1073741824 ] 2>/dev/null; then
+        echo "$(awk -v b="$bytes" 'BEGIN {printf "%.2f", b/1048576}') MB"
+    else
+        echo "$(awk -v b="$bytes" 'BEGIN {printf "%.2f", b/1073741824}') GB"
+    fi
+}
+
+# Format seconds to human-readable duration
+format_duration() {
+    local secs=$1
+    [[ "$secs" =~ ^-?[0-9]+$ ]] || secs=0
+    [ "$secs" -lt 1 ] && { echo "0s"; return; }
+    local days=$((secs / 86400))
+    local hours=$(( (secs % 86400) / 3600 ))
+    local mins=$(( (secs % 3600) / 60 ))
+    if [ "$days" -gt 0 ]; then
+        echo "${days}d ${hours}h ${mins}m"
+    elif [ "$hours" -gt 0 ]; then
+        echo "${hours}h ${mins}m"
+    elif [ "$mins" -gt 0 ]; then
+        echo "${mins}m"
+    else
+        echo "${secs}s"
+    fi
+}
+
+# Format large numbers
+format_number() {
+    local num=$1
+    [ -z "$num" ] || [ "$num" = "0" ] && { echo "0"; return; }
+    if [ "$num" -ge 1000000 ] 2>/dev/null; then
+        echo "$(awk -v n="$num" 'BEGIN {printf "%.1f", n/1000000}')M"
+    elif [ "$num" -ge 1000 ] 2>/dev/null; then
+        echo "$(awk -v n="$num" 'BEGIN {printf "%.1f", n/1000}')K"
+    else
+        echo "$num"
+    fi
+}
+
+# Escape markdown special characters
+escape_md() {
+    local text="$1"
+    text="${text//\\/\\\\}"
+    text="${text//\*/\\*}"
+    text="${text//_/\\_}"
+    text="${text//\`/\\\`}"
+    text="${text//\[/\\[}"
+    text="${text//\]/\\]}"
+    echo "$text"
+}
+
+# Compare version strings: returns 0 if v1 >= v2 (semver part only, ignores commit hash)
+_version_gte() {
+    local v1="${1%%-*}" v2="${2%%-*}"  # strip commit hash
+    local IFS='.'; local a=($v1) b=($v2)
+    local i
+    for i in 0 1 2; do
+        local n1=${a[$i]:-0} n2=${b[$i]:-0}
+        (( n1 > n2 )) && return 0
+        (( n1 < n2 )) && return 1
+    done
+    return 0
+}
+
+# Get public IP address
+_PUBLIC_IP_CACHE=""
+_PUBLIC_IP_CACHE_AGE=0
+
+get_public_ip() {
+    # Return custom IP if configured
+    if [ -n "${CUSTOM_IP}" ]; then
+        echo "${CUSTOM_IP}"
+        return 0
+    fi
+    local now; now=$(date +%s)
+    # Return cached IP if less than 5 minutes old
+    if [ -n "$_PUBLIC_IP_CACHE" ] && [ $(( now - _PUBLIC_IP_CACHE_AGE )) -lt 300 ]; then
+        echo "$_PUBLIC_IP_CACHE"
+        return 0
+    fi
+    local ip=""
+    ip=$(curl -s --max-time 3 https://api.ipify.org 2>/dev/null) ||
+    ip=$(curl -s --max-time 3 https://ifconfig.me 2>/dev/null) ||
+    ip=$(curl -s --max-time 3 https://icanhazip.com 2>/dev/null) ||
+    ip=""
+    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$ip" =~ : ]]; then
+        _PUBLIC_IP_CACHE="$ip"
+        _PUBLIC_IP_CACHE_AGE=$now
+        echo "$ip"
+    fi
+}
+
+# Validate port number
+validate_port() {
+    local port="$1"
+    [[ "$port" =~ ^[0-9]+$ ]] && [ "$port" -ge 1 ] && [ "$port" -le 65535 ]
+}
+
+# Check if port is available
+is_port_available() {
+    local port="$1"
+    if command -v ss &>/dev/null; then
+        ! ss -tln 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${port}$"
+    elif command -v netstat &>/dev/null; then
+        ! netstat -tln 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${port}$"
+    else
+        return 0
+    fi
+}
+
+# Check if running as root
+check_root() {
+    if [ "$(id -u)" -ne 0 ]; then
+        log_error "MTProxyMax must be run as root"
+        echo -e "  ${DIM}Попробуйте: sudo $0 $*${NC}"
+        exit 1
+    fi
+}
+
+# Detect OS
+detect_os() {
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        case "$ID" in
+            ubuntu|debian|pop|linuxmint|kali) echo "debian" ;;
+            centos|rhel|fedora|rocky|alma|oracle) echo "rhel" ;;
+            alpine) echo "alpine" ;;
+            *) echo "unknown" ;;
+        esac
+    elif [ -f /etc/debian_version ]; then
+        echo "debian"
+    elif [ -f /etc/redhat-release ]; then
+        echo "rhel"
+    else
+        echo "unknown"
+    fi
+}
+
+# Check dependencies
+check_dependencies() {
+    local missing=()
+    command -v curl &>/dev/null || missing+=("curl")
+    command -v awk &>/dev/null || missing+=("awk")
+    command -v openssl &>/dev/null || missing+=("openssl")
+    command -v nft &>/dev/null || missing+=("nftables")
+
+    if [ ${#missing[@]} -gt 0 ]; then
+        log_warn "Missing dependencies: ${missing[*]}"
+        log_info "Installing..."
+        local os
+        os=$(detect_os)
+        case "$os" in
+            debian) apt-get update -qq && apt-get install -y -qq "${missing[@]}" ;;
+            rhel)   yum install -y -q "${missing[@]}" ;;
+            alpine) apk add --no-cache "${missing[@]}" ;;
+        esac
+    fi
+}
+
+# Parse human-readable byte sizes (e.g., 5G, 500M, 1T) to raw bytes
+parse_human_bytes() {
+    local input="${1:-0}"
+    input="${input^^}"  # uppercase
+    local num unit
+    if [[ "$input" =~ ^([0-9]+(\.[0-9]+)?)[[:space:]]*(B|K|KB|M|MB|G|GB|T|TB)?$ ]]; then
+        num="${BASH_REMATCH[1]}"
+        unit="${BASH_REMATCH[3]:-B}"
+    elif [[ "$input" =~ ^[0-9]+$ ]]; then
+        echo "$input"
+        return 0
+    else
+        echo "0"
+        return 1
+    fi
+    case "$unit" in
+        B)        awk -v n="$num" 'BEGIN {printf "%d", n}' ;;
+        K|KB)     awk -v n="$num" 'BEGIN {printf "%d", n * 1024}' ;;
+        M|MB)     awk -v n="$num" 'BEGIN {printf "%d", n * 1048576}' ;;
+        G|GB)     awk -v n="$num" 'BEGIN {printf "%d", n * 1073741824}' ;;
+        T|TB)     awk -v n="$num" 'BEGIN {printf "%d", n * 1099511627776}' ;;
+        *)        echo "0"; return 1 ;;
+    esac
+}
+
+# Validate a domain name (reject TOML/shell-unsafe characters)
+validate_domain() {
+    local d="$1"
+    [ -z "$d" ] && return 1
+    # Only allow valid hostname chars: letters, digits, dots, hyphens
+    [[ "$d" =~ ^[a-zA-Z0-9.-]+$ ]] && [[ "$d" =~ \. ]]
+}
+
+# ── Section 5: Settings Persistence ──────────────────────────
+
+save_settings() {
+    mkdir -p "$INSTALL_DIR"
+
+    local tmp
+    tmp=$(_mktemp) || { log_error "Cannot create temp file"; return 1; }
+
+    cat > "$tmp" << SETTINGS_EOF
+# MTProxyMax Settings — v${VERSION}
+# Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+# DO NOT EDIT MANUALLY — use 'mtproxymax' to change settings
+
+# Proxy Configuration
+PROXY_PORT='${PROXY_PORT}'
+PROXY_METRICS_PORT='${PROXY_METRICS_PORT}'
+PROXY_DOMAIN='${PROXY_DOMAIN}'
+PROXY_CONCURRENCY='${PROXY_CONCURRENCY}'
+PROXY_CPUS='${PROXY_CPUS}'
+PROXY_MEMORY='${PROXY_MEMORY}'
+CUSTOM_IP='${CUSTOM_IP}'
+FAKE_CERT_LEN='${FAKE_CERT_LEN}'
+PROXY_PROTOCOL='${PROXY_PROTOCOL}'
+PROXY_PROTOCOL_TRUSTED_CIDRS='${PROXY_PROTOCOL_TRUSTED_CIDRS}'
+
+# Ad-Tag (from @MTProxyBot)
+AD_TAG='${AD_TAG}'
+
+# Geo-Blocking
+GEOBLOCK_MODE='${GEOBLOCK_MODE}'
+BLOCKLIST_COUNTRIES='${BLOCKLIST_COUNTRIES}'
+
+# Traffic Masking
+MASKING_ENABLED='${MASKING_ENABLED}'
+MASKING_HOST='${MASKING_HOST}'
+MASKING_PORT='${MASKING_PORT}'
+
+# Telegram Integration
+TELEGRAM_ENABLED='${TELEGRAM_ENABLED}'
+TELEGRAM_BOT_TOKEN='${TELEGRAM_BOT_TOKEN}'
+TELEGRAM_CHAT_ID='${TELEGRAM_CHAT_ID}'
+TELEGRAM_INTERVAL='${TELEGRAM_INTERVAL}'
+TELEGRAM_ALERTS_ENABLED='${TELEGRAM_ALERTS_ENABLED}'
+TELEGRAM_SERVER_LABEL='${TELEGRAM_SERVER_LABEL}'
+
+# Auto-Update
+AUTO_UPDATE_ENABLED='${AUTO_UPDATE_ENABLED}'
+SETTINGS_EOF
+
+    chmod 600 "$tmp"
+    mv "$tmp" "$SETTINGS_FILE"
+}
+
+load_settings() {
+    [ -f "$SETTINGS_FILE" ] || return 0
+
+    # Safe whitelist-based parsing (no source/eval)
+    while IFS= read -r line; do
+        # Skip comments and empty lines
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+
+        # Match KEY='VALUE' or KEY="VALUE" or KEY=VALUE
+        if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=\'([^\']*)\'$ ]]; then
+            local key="${BASH_REMATCH[1]}" val="${BASH_REMATCH[2]}"
+        elif [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=\"([^\"]*)\"$ ]]; then
+            local key="${BASH_REMATCH[1]}" val="${BASH_REMATCH[2]}"
+        elif [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=([^[:space:]]*)$ ]]; then
+            local key="${BASH_REMATCH[1]}" val="${BASH_REMATCH[2]}"
+        else
+            continue
+        fi
+
+        # Whitelist of allowed keys
+        case "$key" in
+            PROXY_PORT|PROXY_METRICS_PORT|PROXY_DOMAIN|PROXY_CONCURRENCY|\
+            PROXY_CPUS|PROXY_MEMORY|CUSTOM_IP|FAKE_CERT_LEN|PROXY_PROTOCOL|PROXY_PROTOCOL_TRUSTED_CIDRS|AD_TAG|GEOBLOCK_MODE|BLOCKLIST_COUNTRIES|\
+            MASKING_ENABLED|MASKING_HOST|MASKING_PORT|\
+            TELEGRAM_ENABLED|TELEGRAM_BOT_TOKEN|TELEGRAM_CHAT_ID|\
+            TELEGRAM_INTERVAL|TELEGRAM_ALERTS_ENABLED|TELEGRAM_SERVER_LABEL|\
+            AUTO_UPDATE_ENABLED)
+                printf -v "$key" '%s' "$val"
+                ;;
+        esac
+    done < "$SETTINGS_FILE"
+
+    # Post-load validation for numeric fields
+    [[ "$PROXY_PORT" =~ ^[0-9]+$ ]] && [ "$PROXY_PORT" -ge 1 ] && [ "$PROXY_PORT" -le 65535 ] || PROXY_PORT=443
+    [[ "$PROXY_METRICS_PORT" =~ ^[0-9]+$ ]] && [ "$PROXY_METRICS_PORT" -ge 1 ] && [ "$PROXY_METRICS_PORT" -le 65535 ] || PROXY_METRICS_PORT=9090
+    [[ "$MASKING_PORT" =~ ^[0-9]+$ ]] && [ "$MASKING_PORT" -ge 1 ] && [ "$MASKING_PORT" -le 65535 ] || MASKING_PORT=443
+    [[ "$FAKE_CERT_LEN" =~ ^[0-9]+$ ]] && [ "$FAKE_CERT_LEN" -ge 512 ] || FAKE_CERT_LEN=2048
+    [[ "$PROXY_CONCURRENCY" =~ ^[0-9]+$ ]] || PROXY_CONCURRENCY=8192
+    [[ "$PROXY_PROTOCOL" == "true" ]] || PROXY_PROTOCOL="false"
+    [[ "$GEOBLOCK_MODE" == "whitelist" ]] || GEOBLOCK_MODE="blacklist"
+    [[ "$TELEGRAM_INTERVAL" =~ ^[0-9]+$ ]] || TELEGRAM_INTERVAL=6
+    [[ "$TELEGRAM_CHAT_ID" =~ ^-?[0-9]+$ ]] || TELEGRAM_CHAT_ID=""
+}
+
+# Save secrets database
+save_secrets() {
+    mkdir -p "$INSTALL_DIR"
+
+    local tmp
+    tmp=$(_mktemp) || { log_error "Cannot create temp file"; return 1; }
+
+    echo "# MTProxyMax Secrets Database — v${VERSION}" > "$tmp"
+    echo "# Format: LABEL|SECRET|CREATED_TS|ENABLED|MAX_CONNS|MAX_IPS|QUOTA_BYTES|EXPIRES|NOTES" >> "$tmp"
+    echo "# DO NOT EDIT MANUALLY — use 'mtproxymax secret' commands" >> "$tmp"
+
+    if [ ${#SECRETS_LABELS[@]} -gt 0 ]; then
+        local i
+        for i in "${!SECRETS_LABELS[@]}"; do
+            echo "${SECRETS_LABELS[$i]}|${SECRETS_KEYS[$i]}|${SECRETS_CREATED[$i]}|${SECRETS_ENABLED[$i]}|${SECRETS_MAX_CONNS[$i]:-0}|${SECRETS_MAX_IPS[$i]:-0}|${SECRETS_QUOTA[$i]:-0}|${SECRETS_EXPIRES[$i]:-0}|${SECRETS_NOTES[$i]:-}" >> "$tmp"
+        done
+    fi
+
+    chmod 600 "$tmp"
+    mv "$tmp" "$SECRETS_FILE"
+}
+
+# Arrays for secret management
+declare -a SECRETS_LABELS=()
+declare -a SECRETS_KEYS=()
+declare -a SECRETS_CREATED=()
+declare -a SECRETS_ENABLED=()
+declare -a SECRETS_MAX_CONNS=()
+declare -a SECRETS_MAX_IPS=()
+declare -a SECRETS_QUOTA=()
+declare -a SECRETS_EXPIRES=()
+declare -a SECRETS_NOTES=()
+
+# Load secrets database
+load_secrets() {
+    SECRETS_LABELS=()
+    SECRETS_KEYS=()
+    SECRETS_CREATED=()
+    SECRETS_ENABLED=()
+    SECRETS_MAX_CONNS=()
+    SECRETS_MAX_IPS=()
+    SECRETS_QUOTA=()
+    SECRETS_EXPIRES=()
+    SECRETS_NOTES=()
+
+    if [ -f "$SECRETS_FILE" ]; then
+        while IFS='|' read -r label secret created enabled max_conns max_ips quota expires notes; do
+            [[ "$label" =~ ^[[:space:]]*# ]] && continue
+            [[ "$label" =~ ^[[:space:]]*$ ]] && continue
+            [ -z "$secret" ] && continue
+            # Validate label and secret format on load
+            [[ "$label" =~ ^[a-zA-Z0-9_-]+$ ]] || continue
+            [[ "$secret" =~ ^[0-9a-fA-F]{32}$ ]] || continue
+
+            # Validate numeric fields on load
+            local _mc="${max_conns:-0}" _mi="${max_ips:-0}" _q="${quota:-0}" _en="${enabled:-true}"
+            [[ "$_mc" =~ ^[0-9]+$ ]] || _mc="0"
+            [[ "$_mi" =~ ^[0-9]+$ ]] || _mi="0"
+            [[ "$_q" =~ ^[0-9]+$ ]] || _q="0"
+            [ "$_en" != "true" ] && [ "$_en" != "false" ] && _en="true"
+
+            SECRETS_LABELS+=("$label")
+            SECRETS_KEYS+=("$secret")
+            local _cr="${created:-$(date +%s)}"
+            [[ "$_cr" =~ ^[0-9]+$ ]] || _cr=$(date +%s)
+            SECRETS_CREATED+=("$_cr")
+            SECRETS_ENABLED+=("$_en")
+            SECRETS_MAX_CONNS+=("$_mc")
+            SECRETS_MAX_IPS+=("$_mi")
+            SECRETS_QUOTA+=("$_q")
+            local _ex="${expires:-0}"
+            if [ "$_ex" != "0" ] && ! [[ "$_ex" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}(T[0-9:Z+.-]+)?$ ]]; then
+                _ex="0"
+            fi
+            SECRETS_EXPIRES+=("$_ex")
+            SECRETS_NOTES+=("${notes:-}")
+        done < "$SECRETS_FILE"
+    fi
+
+    # Always load upstreams alongside secrets (both feed into config)
+    load_upstreams
+}
+
+# Arrays for upstream management
+declare -a UPSTREAM_NAMES=()
+declare -a UPSTREAM_TYPES=()
+declare -a UPSTREAM_ADDRS=()
+declare -a UPSTREAM_USERS=()
+declare -a UPSTREAM_PASSES=()
+declare -a UPSTREAM_WEIGHTS=()
+declare -a UPSTREAM_IFACES=()
+declare -a UPSTREAM_ENABLED=()
+
+# Save upstreams database
+save_upstreams() {
+    mkdir -p "$INSTALL_DIR"
+
+    local tmp
+    tmp=$(_mktemp) || { log_error "Cannot create temp file"; return 1; }
+
+    echo "# MTProxyMax Upstreams Database — v${VERSION}" > "$tmp"
+    echo "# Format: NAME|TYPE|ADDR|USER|PASS|WEIGHT|IFACE|ENABLED" >> "$tmp"
+    echo "# DO NOT EDIT MANUALLY — use 'mtproxymax upstream' commands" >> "$tmp"
+
+    if [ ${#UPSTREAM_NAMES[@]} -gt 0 ]; then
+        local i
+        for i in "${!UPSTREAM_NAMES[@]}"; do
+            echo "${UPSTREAM_NAMES[$i]}|${UPSTREAM_TYPES[$i]}|${UPSTREAM_ADDRS[$i]}|${UPSTREAM_USERS[$i]}|${UPSTREAM_PASSES[$i]}|${UPSTREAM_WEIGHTS[$i]}|${UPSTREAM_IFACES[$i]}|${UPSTREAM_ENABLED[$i]}" >> "$tmp"
+        done
+    fi
+
+    chmod 600 "$tmp"
+    mv "$tmp" "$UPSTREAMS_FILE"
+}
+
+# Load upstreams database
+load_upstreams() {
+    UPSTREAM_NAMES=()
+    UPSTREAM_TYPES=()
+    UPSTREAM_ADDRS=()
+    UPSTREAM_USERS=()
+    UPSTREAM_PASSES=()
+    UPSTREAM_WEIGHTS=()
+    UPSTREAM_IFACES=()
+    UPSTREAM_ENABLED=()
+
+    if [ ! -f "$UPSTREAMS_FILE" ]; then
+        # Default: single direct upstream
+        UPSTREAM_NAMES+=("direct")
+        UPSTREAM_TYPES+=("direct")
+        UPSTREAM_ADDRS+=("")
+        UPSTREAM_USERS+=("")
+        UPSTREAM_PASSES+=("")
+        UPSTREAM_WEIGHTS+=("10")
+        UPSTREAM_IFACES+=("")
+        UPSTREAM_ENABLED+=("true")
+        return 0
+    fi
+
+    while IFS='|' read -r name type addr user pass weight iface enabled; do
+        [[ "$name" =~ ^[[:space:]]*# ]] && continue
+        [[ "$name" =~ ^[[:space:]]*$ ]] && continue
+        # Validate name format on load
+        [[ "$name" =~ ^[a-zA-Z0-9_-]+$ ]] || continue
+
+        # Backward compat: old 7-col format has enabled in col7 (no iface)
+        if [ "$iface" = "true" ] || [ "$iface" = "false" ]; then
+            enabled="$iface"
+            iface=""
+        fi
+
+        # Validate type, weight, and enabled on load
+        local _type="${type:-direct}"
+        case "$_type" in
+            direct|socks5|socks4) ;;
+            *) _type="direct" ;;
+        esac
+        local _weight="${weight:-10}"
+        [[ "$_weight" =~ ^[0-9]+$ ]] && [ "$_weight" -ge 1 ] && [ "$_weight" -le 100 ] || _weight="10"
+        local _enabled="${enabled:-true}"
+        [ "$_enabled" != "true" ] && [ "$_enabled" != "false" ] && _enabled="true"
+
+        # Skip socks entries with no address
+        [ "$_type" != "direct" ] && [ -z "${addr:-}" ] && continue
+
+        UPSTREAM_NAMES+=("$name")
+        UPSTREAM_TYPES+=("$_type")
+        UPSTREAM_ADDRS+=("${addr:-}")
+        UPSTREAM_USERS+=("${user:-}")
+        UPSTREAM_PASSES+=("${pass:-}")
+        UPSTREAM_WEIGHTS+=("$_weight")
+        UPSTREAM_IFACES+=("${iface:-}")
+        UPSTREAM_ENABLED+=("$_enabled")
+    done < "$UPSTREAMS_FILE"
+
+    # Ensure at least one entry exists
+    if [ ${#UPSTREAM_NAMES[@]} -eq 0 ]; then
+        UPSTREAM_NAMES+=("direct")
+        UPSTREAM_TYPES+=("direct")
+        UPSTREAM_ADDRS+=("")
+        UPSTREAM_USERS+=("")
+        UPSTREAM_PASSES+=("")
+        UPSTREAM_WEIGHTS+=("10")
+        UPSTREAM_IFACES+=("")
+        UPSTREAM_ENABLED+=("true")
+    fi
+}
+
+# ── Section 6: Docker Management ─────────────────────────────
+
+install_docker() {
+    if command -v docker &>/dev/null; then
+        log_success "Docker is already installed"
+        return 0
+    fi
+
+    log_info "Installing Docker..."
+    local os
+    os=$(detect_os)
+
+    case "$os" in
+        debian)
+            curl -fsSL https://get.docker.com | sh
+            ;;
+        rhel)
+            if command -v dnf &>/dev/null; then
+                dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo 2>/dev/null ||
+                yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+                dnf install -y docker-ce docker-ce-cli containerd.io
+            else
+                yum install -y yum-utils
+                yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+                yum install -y docker-ce docker-ce-cli containerd.io
+            fi
+            ;;
+        alpine)
+            apk add --no-cache docker docker-compose
+            ;;
+        *)
+            log_error "Unsupported OS. Please install Docker manually."
+            return 1
+            ;;
+    esac
+
+    systemctl enable docker 2>/dev/null || rc-update add docker default 2>/dev/null || true
+    systemctl start docker 2>/dev/null || service docker start 2>/dev/null || true
+
+    if command -v docker &>/dev/null; then
+        log_success "Docker installed successfully"
+    else
+        log_error "Docker installation failed"
+        return 1
+    fi
+}
+
+wait_for_docker() {
+    local retries=10
+    while [ $retries -gt 0 ]; do
+        docker info &>/dev/null && return 0
+        sleep 1
+        retries=$((retries - 1))
+    done
+    log_error "Docker is not responding"
+    return 1
+}
+
+# Build telemt Docker image from latest GitHub release binary
+build_telemt_image() {
+    local force="${1:-false}"
+
+    local commit="${TELEMT_COMMIT}"
+    local version="${TELEMT_MIN_VERSION}-${commit}"
+
+    # Skip if image already exists (unless forced)
+    if [ "$force" != "true" ] && docker image inspect "${DOCKER_IMAGE_BASE}:${version}" &>/dev/null; then
+        return 0
+    fi
+
+    # Strategy 1: Pull pre-built image from registry (fast — seconds)
+    log_info "Pulling pre-built telemt v${version}..."
+    if docker pull "${REGISTRY_IMAGE}:${version}" 2>/dev/null; then
+        docker tag "${REGISTRY_IMAGE}:${version}" "${DOCKER_IMAGE_BASE}:${version}"
+        docker tag "${DOCKER_IMAGE_BASE}:${version}" "${DOCKER_IMAGE_BASE}:latest" 2>/dev/null || true
+        log_success "Pulled telemt v${version}"
+        mkdir -p "$INSTALL_DIR"
+        echo "$version" > "${INSTALL_DIR}/.telemt_version"
+        return 0
+    fi
+
+    # Strategy 2: Pull latest from registry if exact version not found
+    if [ "$force" != "source" ]; then
+        log_info "Exact version not in registry, trying latest..."
+        if docker pull "${REGISTRY_IMAGE}:latest" 2>/dev/null; then
+            docker tag "${REGISTRY_IMAGE}:latest" "${DOCKER_IMAGE_BASE}:${version}"
+            docker tag "${DOCKER_IMAGE_BASE}:${version}" "${DOCKER_IMAGE_BASE}:latest" 2>/dev/null || true
+            log_success "Pulled telemt (latest)"
+            mkdir -p "$INSTALL_DIR"
+            echo "$version" > "${INSTALL_DIR}/.telemt_version"
+            return 0
+        fi
+    fi
+
+    # Strategy 3: Build from source (slow first time, cached after)
+    log_warn "Pre-built image not available, compiling from source..."
+    log_info "Includes: Prometheus metrics, ME perf fixes, critical ME bug fixes"
+
+    local build_dir
+    build_dir=$(mktemp -d "${TMPDIR:-/tmp}/mtproxymax-build.XXXXXX")
+
+    cat > "${build_dir}/Dockerfile" << 'DOCKERFILE_EOF'
+FROM rust:1-bookworm AS builder
+ARG TELEMT_COMMIT
+RUN apt-get update && apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
+RUN git clone "https://github.com/telemt/telemt.git" /build
+WORKDIR /build
+RUN git checkout "${TELEMT_COMMIT}"
+ENV CARGO_PROFILE_RELEASE_LTO=true CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 CARGO_PROFILE_RELEASE_DEBUG=false
+RUN cargo build --release && \
+    strip target/release/telemt 2>/dev/null || true && \
+    cp target/release/telemt /telemt
+
+FROM debian:bookworm-slim
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
+COPY --from=builder /telemt /usr/local/bin/telemt
+RUN chmod +x /usr/local/bin/telemt
+STOPSIGNAL SIGINT
+ENTRYPOINT ["telemt"]
+DOCKERFILE_EOF
+
+    log_info "Compiling from source (first build takes a few minutes)..."
+    if docker build \
+        --build-arg "TELEMT_COMMIT=${commit}" \
+        -t "${DOCKER_IMAGE_BASE}:${version}" "$build_dir"; then
+        docker tag "${DOCKER_IMAGE_BASE}:${version}" "${DOCKER_IMAGE_BASE}:latest" 2>/dev/null || true
+        log_success "Built telemt v${version} from source"
+        mkdir -p "$INSTALL_DIR"
+        echo "$version" > "${INSTALL_DIR}/.telemt_version"
+    else
+        log_error "Source build failed — ensure Docker has enough memory (2GB+)"
+        rm -rf "$build_dir"
+        return 1
+    fi
+
+    rm -rf "$build_dir"
+    return 0
+}
+
+# Get installed telemt version
+get_telemt_version() {
+    # Try saved version file first
+    local ver
+    ver=$(cat "${INSTALL_DIR}/.telemt_version" 2>/dev/null)
+    if [ -n "$ver" ]; then echo "$ver"; return; fi
+    # Fallback: check Docker image tags
+    ver=$(docker images --format '{{.Tag}}' "${DOCKER_IMAGE_BASE}" 2>/dev/null | grep -E '^[0-9]+\.' | head -1)
+    if [ -n "$ver" ]; then echo "$ver"; return; fi
+    echo "unknown"
+}
+
+# Get the versioned Docker image tag for telemt
+get_docker_image() {
+    local ver
+    ver=$(get_telemt_version)
+    if [ "$ver" = "unknown" ]; then
+        echo "${DOCKER_IMAGE_BASE}:latest"
+    else
+        echo "${DOCKER_IMAGE_BASE}:${ver}"
+    fi
+}
+
+# ── Section 7: Telemt Engine ─────────────────────────────────
+
+# Generate a random 32-char hex secret
+generate_secret() {
+    openssl rand -hex 16 2>/dev/null || {
+        # Fallback
+        head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n' | head -c 32
+    }
+}
+
+# Convert domain to hex for ee-prefixed FakeTLS secret
+domain_to_hex() {
+    printf '%s' "$1" | od -An -tx1 | tr -d ' \n'
+}
+
+# Build the full FakeTLS secret for sharing (ee + raw_secret + domain_hex)
+build_faketls_secret() {
+    local raw_secret="$1" domain="${2:-$PROXY_DOMAIN}"
+    local domain_hex
+    domain_hex=$(domain_to_hex "$domain")
+    echo "ee${raw_secret}${domain_hex}"
+}
+
+# Generate telemt config.toml
+generate_telemt_config() {
+    mkdir -p "$CONFIG_DIR"
+    chmod 700 "$CONFIG_DIR"
+
+    local domain="${PROXY_DOMAIN:-cloudflare.com}"
+    local mask_enabled="${MASKING_ENABLED:-true}"
+    local mask_host="${MASKING_HOST:-$domain}"
+    local mask_port="${MASKING_PORT:-443}"
+    local ad_tag="${AD_TAG:-}"
+    local port="${PROXY_PORT:-443}"
+    local metrics_port="${PROXY_METRICS_PORT:-9090}"
+
+    # Build config in a temp file for atomic write (same-dir for atomic mv)
+    local tmp
+    tmp=$(_mktemp "$CONFIG_DIR") || { log_error "Cannot create temp file for config"; return 1; }
+
+    cat > "$tmp" << TOML_EOF
+# MTProxyMax — telemt configuration
+# Generated: $(date -u '+%Y-%m-%d %H:%M:%S UTC')
+
+[general]
+prefer_ipv6 = false
+fast_mode = true
+use_middle_proxy = true
+log_level = "normal"
+$([ -n "$ad_tag" ] && echo "ad_tag = \"$ad_tag\"" || echo "# ad_tag = \"\"  # Get from @MTProxyBot")
+
+[general.modes]
+classic = false
+secure = false
+tls = true
+
+[general.links]
+show = [$(get_enabled_labels_quoted)]
+# public_host = ""
+# public_port = ${port}
+
+[server]
+port = ${port}
+listen_addr_ipv4 = "0.0.0.0"
+listen_addr_ipv6 = "::"
+proxy_protocol = ${PROXY_PROTOCOL:-false}
+$([ "$PROXY_PROTOCOL" = "true" ] && [ -n "$PROXY_PROTOCOL_TRUSTED_CIDRS" ] && echo "proxy_protocol_trusted_cidrs = [$(echo "$PROXY_PROTOCOL_TRUSTED_CIDRS" | sed 's/[[:space:]]*,[[:space:]]*/", "/g;s/^/"/;s/$/"/' )]")
+metrics_port = ${metrics_port}
+metrics_whitelist = ["127.0.0.1", "::1"]
+
+[timeouts]
+client_handshake = 30
+tg_connect = 10
+client_keepalive = 15
+client_ack = 90
+
+[censorship]
+tls_domain = "${domain}"
+unknown_sni_action = "mask"
+mask = ${mask_enabled}
+mask_port = ${mask_port}
+$([ "$mask_enabled" = "true" ] && [ -n "$mask_host" ] && echo "mask_host = \"${mask_host}\"")
+fake_cert_len = ${FAKE_CERT_LEN:-2048}
+# Note: geo-blocking is enforced at the host firewall level (iptables/nftables),
+# not via telemt config. See: mtproxymax info -> Geo-Blocking
+
+[access]
+replay_check_len = 65536
+replay_window_secs = 1800
+ignore_time_skew = false
+
+[access.users]
+TOML_EOF
+
+    # Append enabled secrets
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+        echo "${SECRETS_LABELS[$i]} = \"${SECRETS_KEYS[$i]}\"" >> "$tmp"
+    done
+
+    # Append per-user limits (only sections with non-zero values)
+    local has_conns=false has_ips=false has_quota=false has_expires=false
+    for i in "${!SECRETS_LABELS[@]}"; do
+        [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+        [ "${SECRETS_MAX_CONNS[$i]:-0}" != "0" ] && has_conns=true
+        [ "${SECRETS_MAX_IPS[$i]:-0}" != "0" ] && has_ips=true
+        [ "${SECRETS_QUOTA[$i]:-0}" != "0" ] && has_quota=true
+        [ "${SECRETS_EXPIRES[$i]:-0}" != "0" ] && has_expires=true
+    done
+
+    if $has_conns; then
+        echo "" >> "$tmp"
+        echo "[access.user_max_tcp_conns]" >> "$tmp"
+        for i in "${!SECRETS_LABELS[@]}"; do
+            [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+            [ "${SECRETS_MAX_CONNS[$i]:-0}" != "0" ] || continue
+            echo "${SECRETS_LABELS[$i]} = ${SECRETS_MAX_CONNS[$i]}" >> "$tmp"
+        done
+    fi
+
+    if $has_ips; then
+        echo "" >> "$tmp"
+        echo "[access.user_max_unique_ips]" >> "$tmp"
+        for i in "${!SECRETS_LABELS[@]}"; do
+            [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+            [ "${SECRETS_MAX_IPS[$i]:-0}" != "0" ] || continue
+            echo "${SECRETS_LABELS[$i]} = ${SECRETS_MAX_IPS[$i]}" >> "$tmp"
+        done
+    fi
+
+    if $has_quota; then
+        echo "" >> "$tmp"
+        echo "[access.user_data_quota]" >> "$tmp"
+        for i in "${!SECRETS_LABELS[@]}"; do
+            [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+            [ "${SECRETS_QUOTA[$i]:-0}" != "0" ] || continue
+            echo "${SECRETS_LABELS[$i]} = ${SECRETS_QUOTA[$i]}" >> "$tmp"
+        done
+    fi
+
+    if $has_expires; then
+        echo "" >> "$tmp"
+        echo "[access.user_expirations]" >> "$tmp"
+        for i in "${!SECRETS_LABELS[@]}"; do
+            [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+            [ "${SECRETS_EXPIRES[$i]:-0}" != "0" ] || continue
+            echo "${SECRETS_LABELS[$i]} = \"${SECRETS_EXPIRES[$i]}\"" >> "$tmp"
+        done
+    fi
+
+    # Append enabled upstream entries
+    for i in "${!UPSTREAM_NAMES[@]}"; do
+        [ "${UPSTREAM_ENABLED[$i]}" = "true" ] || continue
+        echo "" >> "$tmp"
+        echo "[[upstreams]]" >> "$tmp"
+        echo "type = \"${UPSTREAM_TYPES[$i]}\"" >> "$tmp"
+        echo "weight = ${UPSTREAM_WEIGHTS[$i]}" >> "$tmp"
+        if [ "${UPSTREAM_TYPES[$i]}" != "direct" ] && [ -n "${UPSTREAM_ADDRS[$i]}" ]; then
+            echo "address = \"${UPSTREAM_ADDRS[$i]}\"" >> "$tmp"
+        fi
+        # SOCKS5 uses username/password; SOCKS4 uses user_id
+        if [ "${UPSTREAM_TYPES[$i]}" = "socks5" ]; then
+            [ -n "${UPSTREAM_USERS[$i]}" ] && echo "username = \"${UPSTREAM_USERS[$i]}\"" >> "$tmp"
+            [ -n "${UPSTREAM_PASSES[$i]}" ] && echo "password = \"${UPSTREAM_PASSES[$i]}\"" >> "$tmp"
+        elif [ "${UPSTREAM_TYPES[$i]}" = "socks4" ] && [ -n "${UPSTREAM_USERS[$i]}" ]; then
+            echo "user_id = \"${UPSTREAM_USERS[$i]}\"" >> "$tmp"
+        fi
+        # Bind outbound to specific IP
+        if [ -n "${UPSTREAM_IFACES[$i]}" ]; then
+            echo "interface = \"${UPSTREAM_IFACES[$i]}\"" >> "$tmp"
+        fi
+    done
+
+    chmod 644 "$tmp"
+    cp "$tmp" "${CONFIG_DIR}/config.toml" && rm -f "$tmp"
+}
+
+# Get comma-separated quoted list of enabled labels for config
+get_enabled_labels_quoted() {
+    local result="" first=true
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+        if $first; then
+            result="\"${SECRETS_LABELS[$i]}\""
+            first=false
+        else
+            result+=", \"${SECRETS_LABELS[$i]}\""
+        fi
+    done
+    echo "$result"
+}
+
+# ── Traffic Tracking ──────────────────────────────────────────
+# Primary: Prometheus /metrics endpoint (telemt built from HEAD)
+# Fallback: iptables byte counters (if metrics unavailable)
+
+IPTABLES_CHAIN="MTPROXY_STATS"
+_TRACKED_PORT=""
+_METRICS_CACHE=""
+_METRICS_CACHE_AGE=0
+
+# Fetch Prometheus metrics (cached for 2 seconds to avoid hammering)
+_fetch_metrics() {
+    local now
+    now=$(date +%s)
+    if [ -n "$_METRICS_CACHE" ] && [ $((now - _METRICS_CACHE_AGE)) -lt 2 ]; then
+        echo "$_METRICS_CACHE"
+        return 0
+    fi
+    _METRICS_CACHE=$(curl -s --max-time 2 "http://127.0.0.1:${PROXY_METRICS_PORT:-9090}/metrics" 2>/dev/null)
+    _METRICS_CACHE_AGE=$now
+    [ -n "$_METRICS_CACHE" ] && echo "$_METRICS_CACHE" && return 0
+    return 1
+}
+
+# Set up iptables tracking rules (fallback when Prometheus unavailable)
+# Idempotent — safe to call repeatedly, auto-handles port changes
+traffic_tracking_setup() {
+    local port="${PROXY_PORT:-443}"
+
+    if [ "$_TRACKED_PORT" = "$port" ] && \
+       iptables -C "$IPTABLES_CHAIN" -p tcp --dport "$port" -m comment --comment "mtproxymax-in" 2>/dev/null; then
+        return 0
+    fi
+
+    iptables -N "$IPTABLES_CHAIN" 2>/dev/null || true
+    iptables -F "$IPTABLES_CHAIN" 2>/dev/null
+    iptables -A "$IPTABLES_CHAIN" -p tcp --dport "$port" -m comment --comment "mtproxymax-in" 2>/dev/null
+    iptables -A "$IPTABLES_CHAIN" -p tcp --sport "$port" -m comment --comment "mtproxymax-out" 2>/dev/null
+    iptables -C INPUT -j "$IPTABLES_CHAIN" -m comment --comment "mtproxymax" 2>/dev/null || \
+        iptables -I INPUT -j "$IPTABLES_CHAIN" -m comment --comment "mtproxymax" 2>/dev/null
+    iptables -C OUTPUT -j "$IPTABLES_CHAIN" -m comment --comment "mtproxymax" 2>/dev/null || \
+        iptables -I OUTPUT -j "$IPTABLES_CHAIN" -m comment --comment "mtproxymax" 2>/dev/null
+
+    _TRACKED_PORT="$port"
+}
+
+# Remove all iptables tracking rules
+traffic_tracking_teardown() {
+    local i
+    for i in 1 2 3; do
+        iptables -D INPUT -j "$IPTABLES_CHAIN" -m comment --comment "mtproxymax" 2>/dev/null || true
+        iptables -D OUTPUT -j "$IPTABLES_CHAIN" -m comment --comment "mtproxymax" 2>/dev/null || true
+        iptables -D INPUT -j "$IPTABLES_CHAIN" 2>/dev/null || true
+        iptables -D OUTPUT -j "$IPTABLES_CHAIN" 2>/dev/null || true
+    done
+    iptables -F "$IPTABLES_CHAIN" 2>/dev/null || true
+    iptables -X "$IPTABLES_CHAIN" 2>/dev/null || true
+    _TRACKED_PORT=""
+}
+
+# Read current traffic counters
+# Returns: bytes_in bytes_out connections
+get_proxy_stats() {
+    if ! is_proxy_running; then
+        echo "0 0 0"
+        return
+    fi
+
+    # Try Prometheus first
+    local m
+    if m=$(_fetch_metrics); then
+        local bi bo conns
+        bi=$(echo "$m" | awk '/^telemt_user_octets_from_client\{/{s+=$NF}END{printf "%.0f",s}')
+        bo=$(echo "$m" | awk '/^telemt_user_octets_to_client\{/{s+=$NF}END{printf "%.0f",s}')
+        conns=$(echo "$m" | awk '/^telemt_user_connections_current\{/{s+=$NF}END{printf "%.0f",s}')
+        echo "${bi:-0} ${bo:-0} ${conns:-0}"
+        return
+    fi
+
+    # Fallback: iptables
+    local port="${PROXY_PORT:-443}"
+    if [ "$_TRACKED_PORT" != "$port" ] || \
+       ! iptables -C "$IPTABLES_CHAIN" -p tcp --dport "$port" -m comment --comment "mtproxymax-in" 2>/dev/null; then
+        traffic_tracking_setup
+    fi
+
+    local stats
+    stats=$(iptables -L "$IPTABLES_CHAIN" -v -n -x 2>/dev/null)
+    local bytes_in bytes_out
+    bytes_in=$(echo "$stats" | awk '/mtproxymax-in/ {print $2; exit}')
+    bytes_out=$(echo "$stats" | awk '/mtproxymax-out/ {print $2; exit}')
+    local connections
+    connections=$(ss -tn state established 2>/dev/null | grep -c ":${port} " || echo "0")
+
+    echo "${bytes_in:-0} ${bytes_out:-0} ${connections:-0}"
+}
+
+# Get cumulative global traffic (persisted across restarts)
+get_cumulative_proxy_stats() {
+    local _stats_dir="${INSTALL_DIR}/relay_stats"
+    local _tf="${_stats_dir}/cumulative_traffic"
+    local _gsnap="${_stats_dir}/global_traffic_snapshot"
+
+    local saved_in=0 saved_out=0
+    if [ -f "$_tf" ]; then
+        IFS='|' read -r saved_in saved_out < "$_tf"
+    fi
+    [[ "${saved_in:-0}" =~ ^[0-9]+$ ]] || saved_in=0
+    [[ "${saved_out:-0}" =~ ^[0-9]+$ ]] || saved_out=0
+
+    local snap_in=0 snap_out=0
+    if [ -f "$_gsnap" ]; then
+        IFS='|' read -r snap_in snap_out < "$_gsnap"
+    fi
+    [[ "${snap_in:-0}" =~ ^[0-9]+$ ]] || snap_in=0
+    [[ "${snap_out:-0}" =~ ^[0-9]+$ ]] || snap_out=0
+
+    local live_in=0 live_out=0 conns=0
+    read -r live_in live_out conns <<< "$(get_proxy_stats)"
+
+    local delta_in=$((live_in - snap_in))
+    local delta_out=$((live_out - snap_out))
+    [ "$delta_in" -lt 0 ] 2>/dev/null && delta_in=$live_in
+    [ "$delta_out" -lt 0 ] 2>/dev/null && delta_out=$live_out
+
+    echo "$(( saved_in + delta_in )) $(( saved_out + delta_out )) ${conns}"
+}
+
+# Get per-user stats from Prometheus
+# Returns: bytes_in bytes_out connections
+get_user_stats() {
+    local user="$1"
+    local m
+    if m=$(_fetch_metrics); then
+        local i o c
+        i=$(echo "$m" | awk -v u="$user" '$0 ~ "^telemt_user_octets_from_client\\{.*user=\"" u "\"" {print $NF}')
+        o=$(echo "$m" | awk -v u="$user" '$0 ~ "^telemt_user_octets_to_client\\{.*user=\"" u "\"" {print $NF}')
+        c=$(echo "$m" | awk -v u="$user" '$0 ~ "^telemt_user_connections_current\\{.*user=\"" u "\"" {print $NF}')
+        echo "${i:-0} ${o:-0} ${c:-0}"
+        return
+    fi
+    echo "0 0 0"
+}
+
+# Get cumulative per-user traffic (persisted across restarts)
+# Reads saved cumulative + adds delta from current live Prometheus session
+# Returns: bytes_in bytes_out connections
+get_cumulative_user_stats() {
+    local user="$1"
+    local _stats_dir="${INSTALL_DIR}/relay_stats"
+    local _ut_file="${_stats_dir}/user_traffic"
+    local _snap_file="${_stats_dir}/user_traffic_snapshot"
+
+    # Read saved cumulative for this user
+    local saved_in=0 saved_out=0
+    if [ -f "$_ut_file" ]; then
+        local _line
+        _line=$(awk -F'|' -v u="$user" '$1 == u {print $2"|"$3; exit}' "$_ut_file")
+        if [ -n "$_line" ]; then
+            IFS='|' read -r saved_in saved_out <<< "$_line"
+        fi
+    fi
+    [[ "${saved_in:-0}" =~ ^[0-9]+$ ]] || saved_in=0
+    [[ "${saved_out:-0}" =~ ^[0-9]+$ ]] || saved_out=0
+
+    # Read snapshot (raw Prometheus values at last save)
+    local snap_in=0 snap_out=0
+    if [ -f "$_snap_file" ]; then
+        local _sline
+        _sline=$(awk -F'|' -v u="$user" '$1 == u {print $2"|"$3; exit}' "$_snap_file")
+        if [ -n "$_sline" ]; then
+            IFS='|' read -r snap_in snap_out <<< "$_sline"
+        fi
+    fi
+    [[ "${snap_in:-0}" =~ ^[0-9]+$ ]] || snap_in=0
+    [[ "${snap_out:-0}" =~ ^[0-9]+$ ]] || snap_out=0
+
+    # Get current live Prometheus values
+    local live_in=0 live_out=0 live_conns=0
+    read -r live_in live_out live_conns <<< "$(get_user_stats "$user" 2>/dev/null)"
+
+    # Compute delta since last save
+    # If live < snapshot, a restart happened — delta is just the live value
+    local delta_in=$((live_in - snap_in))
+    local delta_out=$((live_out - snap_out))
+    [ "$delta_in" -lt 0 ] 2>/dev/null && delta_in=$live_in
+    [ "$delta_out" -lt 0 ] 2>/dev/null && delta_out=$live_out
+
+    echo "$(( saved_in + delta_in )) $(( saved_out + delta_out )) ${live_conns}"
+}
+
+# Batch-load cumulative stats for ALL users in one pass (avoids N*8 forks)
+# Populates: _batch_cum_in[label], _batch_cum_out[label], _batch_cum_conns[label]
+declare -A _batch_cum_in _batch_cum_out _batch_cum_conns
+_load_all_cumulative_user_stats() {
+    _batch_cum_in=(); _batch_cum_out=(); _batch_cum_conns=()
+    local _stats_dir="${INSTALL_DIR}/relay_stats"
+    local _ut_file="${_stats_dir}/user_traffic"
+    local _snap_file="${_stats_dir}/user_traffic_snapshot"
+
+    # Load cumulative from disk (one read)
+    declare -A _saved_in _saved_out _snap_in _snap_out
+    if [ -f "$_ut_file" ]; then
+        while IFS='|' read -r _l _i _o; do
+            [[ "$_l" =~ ^[a-zA-Z0-9_-]+$ ]] || continue
+            _i=${_i:-0}; _o=${_o:-0}
+            [[ "$_i" =~ ^[0-9]+$ ]] || _i=0
+            [[ "$_o" =~ ^[0-9]+$ ]] || _o=0
+            _saved_in["$_l"]=$_i; _saved_out["$_l"]=$_o
+        done < "$_ut_file"
+    fi
+    if [ -f "$_snap_file" ]; then
+        while IFS='|' read -r _l _i _o; do
+            [[ "$_l" =~ ^[a-zA-Z0-9_-]+$ ]] || continue
+            _i=${_i:-0}; _o=${_o:-0}
+            [[ "$_i" =~ ^[0-9]+$ ]] || _i=0
+            [[ "$_o" =~ ^[0-9]+$ ]] || _o=0
+            _snap_in["$_l"]=$_i; _snap_out["$_l"]=$_o
+        done < "$_snap_file"
+    fi
+
+    # Fetch metrics once
+    local _m=""
+    _m=$(_fetch_metrics 2>/dev/null) || true
+
+    # Extract all per-user stats in a single awk pass
+    if [ -n "$_m" ]; then
+        while IFS='|' read -r _l _li _lo _lc; do
+            local si=${_snap_in["$_l"]:-0} so=${_snap_out["$_l"]:-0}
+            local di=$((_li - si)) doo=$((_lo - so))
+            [ "$di" -lt 0 ] 2>/dev/null && di=$_li
+            [ "$doo" -lt 0 ] 2>/dev/null && doo=$_lo
+            _batch_cum_in["$_l"]=$(( ${_saved_in["$_l"]:-0} + di ))
+            _batch_cum_out["$_l"]=$(( ${_saved_out["$_l"]:-0} + doo ))
+            _batch_cum_conns["$_l"]=${_lc:-0}
+        done < <(echo "$_m" | awk '
+            function get_user(s,   p,q) {
+                p = index(s, "user=\"")
+                if (!p) return ""
+                s = substr(s, p + 6)
+                q = index(s, "\"")
+                return q ? substr(s, 1, q - 1) : ""
+            }
+            /^telemt_user_octets_from_client\{/ {
+                u = get_user($0); if (u) users_in[u] += $NF
+            }
+            /^telemt_user_octets_to_client\{/ {
+                u = get_user($0); if (u) users_out[u] += $NF
+            }
+            /^telemt_user_connections_current\{/ {
+                u = get_user($0); if (u) users_conns[u] += $NF
+            }
+            END {
+                for (u in users_in) {
+                    printf "%s|%.0f|%.0f|%.0f\n", u, users_in[u]+0, users_out[u]+0, users_conns[u]+0
+                }
+                for (u in users_out) {
+                    if (!(u in users_in)) printf "%s|0|%.0f|%.0f\n", u, users_out[u]+0, users_conns[u]+0
+                }
+            }
+        ')
+    fi
+
+    # Fill in users that have saved data but no live metrics (e.g., after restart with 0 traffic)
+    for _l in "${!_saved_in[@]}"; do
+        if [ -z "${_batch_cum_in[$_l]+x}" ]; then
+            _batch_cum_in["$_l"]=${_saved_in["$_l"]:-0}
+            _batch_cum_out["$_l"]=${_saved_out["$_l"]:-0}
+            _batch_cum_conns["$_l"]=0
+        fi
+    done
+}
+
+# One-shot flush of traffic counters to disk (for use before stop/restart)
+# Works standalone — loads cumulative from disk, computes delta from live metrics, saves back
+flush_traffic_to_disk() {
+    local _stats_dir="${INSTALL_DIR}/relay_stats"
+    local _tf="${_stats_dir}/cumulative_traffic"
+    local _utf="${_stats_dir}/user_traffic"
+    local _snap="${_stats_dir}/user_traffic_snapshot"
+    mkdir -p "$_stats_dir" 2>/dev/null
+    # Acquire lock to prevent race with daemon's save_traffic
+    exec 9>"${_stats_dir}/.traffic.lock"
+    flock -w 5 9 2>/dev/null || return
+
+    # Load existing cumulative totals
+    local cum_in=0 cum_out=0
+    if [ -f "$_tf" ]; then
+        IFS='|' read -r cum_in cum_out < "$_tf"
+    fi
+    [[ "${cum_in:-0}" =~ ^[0-9]+$ ]] || cum_in=0
+    [[ "${cum_out:-0}" =~ ^[0-9]+$ ]] || cum_out=0
+
+    # Load existing per-user cumulative and snapshots
+    declare -A _fu_cum_in _fu_cum_out _fu_snap_in _fu_snap_out
+    if [ -f "$_utf" ]; then
+        while IFS='|' read -r _l _i _o; do
+            [[ "$_l" =~ ^[a-zA-Z0-9_-]+$ ]] || continue
+            _i=${_i:-0}; _o=${_o:-0}
+            [[ "$_i" =~ ^[0-9]+$ ]] || _i=0
+            [[ "$_o" =~ ^[0-9]+$ ]] || _o=0
+            _fu_cum_in["$_l"]=$_i; _fu_cum_out["$_l"]=$_o
+        done < "$_utf"
+    fi
+    if [ -f "$_snap" ]; then
+        while IFS='|' read -r _l _i _o; do
+            [[ "$_l" =~ ^[a-zA-Z0-9_-]+$ ]] || continue
+            _i=${_i:-0}; _o=${_o:-0}
+            [[ "$_i" =~ ^[0-9]+$ ]] || _i=0
+            [[ "$_o" =~ ^[0-9]+$ ]] || _o=0
+            _fu_snap_in["$_l"]=$_i; _fu_snap_out["$_l"]=$_o
+        done < "$_snap"
+    fi
+
+    # Load previous global snapshot
+    local snap_gin=0 snap_gout=0
+    if [ -f "${_stats_dir}/global_traffic_snapshot" ]; then
+        IFS='|' read -r snap_gin snap_gout < "${_stats_dir}/global_traffic_snapshot"
+    fi
+    [[ "${snap_gin:-0}" =~ ^[0-9]+$ ]] || snap_gin=0
+    [[ "${snap_gout:-0}" =~ ^[0-9]+$ ]] || snap_gout=0
+
+    # Fetch current live metrics
+    local _metrics
+    _metrics=$(curl -s --max-time 2 "http://127.0.0.1:${PROXY_METRICS_PORT:-9090}/metrics" 2>/dev/null) || { exec 9>&-; return; }
+    [ -z "$_metrics" ] && { exec 9>&-; return; }
+
+    # Global traffic delta
+    local cur_gin cur_gout
+    cur_gin=$(echo "$_metrics" | awk '/^telemt_user_octets_from_client\{/{s+=$NF}END{printf "%.0f",s}')
+    cur_gout=$(echo "$_metrics" | awk '/^telemt_user_octets_to_client\{/{s+=$NF}END{printf "%.0f",s}')
+    cur_gin=${cur_gin:-0}; cur_gout=${cur_gout:-0}
+    local gd_in=$((cur_gin - snap_gin)) gd_out=$((cur_gout - snap_gout))
+    [ "$gd_in" -lt 0 ] 2>/dev/null && gd_in=$cur_gin
+    [ "$gd_out" -lt 0 ] 2>/dev/null && gd_out=$cur_gout
+    cum_in=$((cum_in + gd_in))
+    cum_out=$((cum_out + gd_out))
+
+    # Per-user traffic delta
+    [ -f "$SECRETS_FILE" ] && while IFS='|' read -r label secret created enabled _mc _mi _q _ex _notes; do
+        [[ "$label" =~ ^# ]] && continue; [ -z "$secret" ] && continue
+        [ "$enabled" != "true" ] && continue
+        local ui uo
+        ui=$(echo "$_metrics" | awk -v u="$label" '$0 ~ "^telemt_user_octets_from_client\\{.*user=\"" u "\"" {print $NF}')
+        uo=$(echo "$_metrics" | awk -v u="$label" '$0 ~ "^telemt_user_octets_to_client\\{.*user=\"" u "\"" {print $NF}')
+        ui=${ui:-0}; uo=${uo:-0}
+        local si=${_fu_snap_in["$label"]:-0} so=${_fu_snap_out["$label"]:-0}
+        local di=$((ui - si)) doo=$((uo - so))
+        [ "$di" -lt 0 ] 2>/dev/null && di=$ui
+        [ "$doo" -lt 0 ] 2>/dev/null && doo=$uo
+        _fu_cum_in["$label"]=$(( ${_fu_cum_in["$label"]:-0} + di ))
+        _fu_cum_out["$label"]=$(( ${_fu_cum_out["$label"]:-0} + doo ))
+        _fu_snap_in["$label"]=$ui
+        _fu_snap_out["$label"]=$uo
+    done < "$SECRETS_FILE"
+
+    # Write cumulative traffic
+    local _tmp
+    _tmp=$(mktemp "${_stats_dir}/.traffic.XXXXXX" 2>/dev/null) || { exec 9>&-; return; }
+    chmod 600 "$_tmp"
+    echo "${cum_in}|${cum_out}" > "$_tmp"
+    mv "$_tmp" "$_tf" 2>/dev/null || { rm -f "$_tmp"; exec 9>&-; return; }
+
+    # Write per-user cumulative
+    _tmp=$(mktemp "${_stats_dir}/.traffic.XXXXXX" 2>/dev/null) || { exec 9>&-; return; }
+    chmod 600 "$_tmp"
+    for _l in "${!_fu_cum_in[@]}"; do
+        echo "${_l}|${_fu_cum_in[$_l]}|${_fu_cum_out[$_l]}" >> "$_tmp"
+    done
+    mv "$_tmp" "$_utf" 2>/dev/null || rm -f "$_tmp"
+
+    # Write per-user snapshot
+    _tmp=$(mktemp "${_stats_dir}/.traffic.XXXXXX" 2>/dev/null) || { exec 9>&-; return; }
+    chmod 600 "$_tmp"
+    for _l in "${!_fu_snap_in[@]}"; do
+        echo "${_l}|${_fu_snap_in[$_l]}|${_fu_snap_out[$_l]}" >> "$_tmp"
+    done
+    mv "$_tmp" "$_snap" 2>/dev/null || rm -f "$_tmp"
+
+    # Write global snapshot
+    _tmp=$(mktemp "${_stats_dir}/.traffic.XXXXXX" 2>/dev/null) || { exec 9>&-; return; }
+    chmod 600 "$_tmp"
+    echo "${cur_gin}|${cur_gout}" > "$_tmp"
+    mv "$_tmp" "${_stats_dir}/global_traffic_snapshot" 2>/dev/null || rm -f "$_tmp"
+    exec 9>&-  # Release lock
+}
+
+# ── Section 8: Secret Management ─────────────────────────────
+
+# Add a new secret
+secret_add() {
+    local label="$1" custom_secret="${2:-}" no_restart="${3:-false}"
+
+    # Validate label
+    if [ -z "$label" ]; then
+        log_error "Label is required"
+        return 1
+    fi
+    if ! [[ "$label" =~ ^[a-zA-Z0-9_-]+$ ]]; then
+        log_error "Label must be alphanumeric (a-z, 0-9, _, -)"
+        return 1
+    fi
+    if [ ${#label} -gt 32 ]; then
+        log_error "Label must be 32 characters or less"
+        return 1
+    fi
+
+    # Check for duplicate
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        if [ "${SECRETS_LABELS[$i]}" = "$label" ]; then
+            log_error "Secret with label '${label}' already exists"
+            return 1
+        fi
+    done
+
+    # Generate or use provided secret
+    local raw_secret
+    if [ -n "$custom_secret" ]; then
+        raw_secret="$custom_secret"
+    else
+        raw_secret=$(generate_secret)
+    fi
+
+    if [ -z "$raw_secret" ] || ! [[ "$raw_secret" =~ ^[0-9a-fA-F]{32}$ ]]; then
+        log_error "Secret must be exactly 32 hex characters"
+        return 1
+    fi
+
+    # Add to arrays
+    SECRETS_LABELS+=("$label")
+    SECRETS_KEYS+=("$raw_secret")
+    SECRETS_CREATED+=("$(date +%s)")
+    SECRETS_ENABLED+=("true")
+    SECRETS_MAX_CONNS+=("0")
+    SECRETS_MAX_IPS+=("0")
+    SECRETS_QUOTA+=("0")
+    SECRETS_EXPIRES+=("0")
+    SECRETS_NOTES+=("")
+
+    # Save
+    save_secrets
+
+    # Hot-reload config (no restart, no dropped connections)
+    if [ "$no_restart" != "true" ]; then
+        reload_proxy_config
+    fi
+
+    local full_secret
+    full_secret=$(build_faketls_secret "$raw_secret")
+    local server_ip
+    server_ip=$(get_public_ip)
+
+    log_success "Secret '${label}' created"
+    echo ""
+    echo -e "  ${BOLD}Ссылка прокси:${NC}"
+    echo -e "  ${CYAN}tg://proxy?server=${server_ip}&port=${PROXY_PORT}&secret=${full_secret}${NC}"
+    echo ""
+    echo -e "  ${BOLD}Веб-ссылка:${NC}"
+    echo -e "  ${CYAN}https://t.me/proxy?server=${server_ip}&port=${PROXY_PORT}&secret=${full_secret}${NC}"
+    echo ""
+}
+
+# Remove a secret
+secret_remove() {
+    local label="$1" force="${2:-false}" no_restart="${3:-false}"
+
+    local idx=-1
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        if [ "${SECRETS_LABELS[$i]}" = "$label" ]; then
+            idx=$i
+            break
+        fi
+    done
+
+    if [ $idx -eq -1 ]; then
+        log_error "Secret '${label}' not found"
+        return 1
+    fi
+
+    # Prevent removing the last secret
+    if [ ${#SECRETS_LABELS[@]} -le 1 ]; then
+        log_error "Cannot remove the last secret — proxy needs at least one"
+        return 1
+    fi
+
+    # Confirm unless forced or non-interactive
+    if [ "$force" != "true" ]; then
+        if [ ! -t 0 ]; then
+            force="true"
+        else
+            echo -e "  ${YELLOW}Удалить секрет '${label}'? Пользователи с этим ключом будут отключены.${NC}"
+            echo -en "  ${BOLD}Type 'yes' to confirm:${NC} "
+            local confirm
+            read -r confirm
+            [ "$confirm" != "yes" ] && { log_info "Cancelled"; return 0; }
+        fi
+    fi
+
+    # Remove from arrays (rebuild without the index)
+    local -a new_labels=() new_keys=() new_created=() new_enabled=()
+    local -a new_max_conns=() new_max_ips=() new_quota=() new_expires=() new_notes=()
+    for i in "${!SECRETS_LABELS[@]}"; do
+        [ "$i" -eq "$idx" ] && continue
+        new_labels+=("${SECRETS_LABELS[$i]}")
+        new_keys+=("${SECRETS_KEYS[$i]}")
+        new_created+=("${SECRETS_CREATED[$i]}")
+        new_enabled+=("${SECRETS_ENABLED[$i]}")
+        new_max_conns+=("${SECRETS_MAX_CONNS[$i]:-0}")
+        new_max_ips+=("${SECRETS_MAX_IPS[$i]:-0}")
+        new_quota+=("${SECRETS_QUOTA[$i]:-0}")
+        new_expires+=("${SECRETS_EXPIRES[$i]:-0}")
+        new_notes+=("${SECRETS_NOTES[$i]:-}")
+    done
+    SECRETS_LABELS=("${new_labels[@]}")
+    SECRETS_KEYS=("${new_keys[@]}")
+    SECRETS_CREATED=("${new_created[@]}")
+    SECRETS_ENABLED=("${new_enabled[@]}")
+    SECRETS_MAX_CONNS=("${new_max_conns[@]}")
+    SECRETS_MAX_IPS=("${new_max_ips[@]}")
+    SECRETS_QUOTA=("${new_quota[@]}")
+    SECRETS_EXPIRES=("${new_expires[@]}")
+    SECRETS_NOTES=("${new_notes[@]}")
+
+    save_secrets
+
+    if [ "$no_restart" != "true" ]; then
+        reload_proxy_config
+    fi
+
+    log_success "Secret '${label}' removed"
+}
+
+# Batch add multiple secrets (single restart)
+secret_add_batch() {
+    local no_restart="false"
+    if [ "$1" = "true" ] || [ "$1" = "false" ]; then
+        no_restart="$1"; shift
+    fi
+    local labels=("$@")
+
+    if [ ${#labels[@]} -eq 0 ]; then
+        log_error "Использование: mtproxymax secret add-batch <метка1> <метка2> ..."
+        return 1
+    fi
+
+    local added=0 failed=0
+    for label in "${labels[@]}"; do
+        if secret_add "$label" "" "true"; then
+            added=$((added + 1))
+        else
+            failed=$((failed + 1))
+        fi
+    done
+
+    # Single hot-reload after all additions
+    if [ "$no_restart" != "true" ] && [ $added -gt 0 ]; then
+        reload_proxy_config
+    fi
+
+    echo ""
+    log_success "Batch complete: ${added} added, ${failed} failed"
+}
+
+# Batch remove multiple secrets (single restart)
+secret_remove_batch() {
+    local force="${1:-false}"
+    shift 2>/dev/null || true
+    local no_restart="false"
+    if [ "$1" = "true" ] || [ "$1" = "false" ]; then
+        no_restart="$1"; shift
+    fi
+    local labels=("$@")
+
+    if [ ${#labels[@]} -eq 0 ]; then
+        log_error "Использование: mtproxymax secret remove-batch <метка1> <метка2> ..."
+        return 1
+    fi
+
+    # Count how many of the requested labels actually exist
+    local match_count=0
+    local l i
+    for l in "${labels[@]}"; do
+        for i in "${!SECRETS_LABELS[@]}"; do
+            [ "${SECRETS_LABELS[$i]}" = "$l" ] && { match_count=$((match_count + 1)); break; }
+        done
+    done
+
+    if [ $match_count -ge ${#SECRETS_LABELS[@]} ]; then
+        log_error "Cannot remove all secrets — proxy needs at least one"
+        return 1
+    fi
+
+    # Confirm unless forced
+    if [ "$force" != "true" ] && [ -t 0 ]; then
+        echo -e "  ${YELLOW}Remove ${#labels[@]} secrets? Users with these keys will be disconnected.${NC}"
+        echo -e "  ${DIM}Labels: ${labels[*]}${NC}"
+        echo -en "  ${BOLD}Type 'yes' to confirm:${NC} "
+        local confirm
+        read -r confirm
+        [ "$confirm" != "yes" ] && { log_info "Cancelled"; return 0; }
+    fi
+
+    local removed=0 failed=0
+    for l in "${labels[@]}"; do
+        if secret_remove "$l" "true" "true"; then
+            removed=$((removed + 1))
+        else
+            failed=$((failed + 1))
+        fi
+    done
+
+    # Single hot-reload after all removals
+    if [ "$no_restart" != "true" ] && [ $removed -gt 0 ]; then
+        reload_proxy_config
+    fi
+
+    echo ""
+    log_success "Batch complete: ${removed} removed, ${failed} failed"
+}
+
+# List all secrets
+secret_list() {
+    load_secrets
+
+    if [ ${#SECRETS_LABELS[@]} -eq 0 ]; then
+        log_info "No secrets configured"
+        echo -e "  ${DIM}Запуск: mtproxymax secret add <метка>${NC}"
+        return
+    fi
+
+    echo ""
+    draw_header "SECRETS"
+    echo ""
+
+    # Batch-load all user stats in one pass (single metrics fetch + single file read)
+    _load_all_cumulative_user_stats 2>/dev/null
+
+    # Table header
+    printf "  ${BOLD}%-4s %-16s %-10s %-10s %-12s %-12s${NC}\n" "#" "LABEL" "STATUS" "CREATED" "TRAFFIC IN" "TRAFFIC OUT"
+    echo -e "  ${DIM}$(_repeat '─' 70)${NC}"
+
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        local label="${SECRETS_LABELS[$i]}"
+        local enabled="${SECRETS_ENABLED[$i]}"
+        local created="${SECRETS_CREATED[$i]}"
+        local status_icon status_text
+
+        if [ "$enabled" = "true" ]; then
+            status_icon="${GREEN}${SYM_OK}${NC}"
+            status_text="${GREEN}active${NC}"
+        else
+            # Check if disabled due to quota
+            local _quota="${SECRETS_QUOTA[$i]:-0}"
+            local _total_usage=$(( ${_batch_cum_in["$label"]:-0} + ${_batch_cum_out["$label"]:-0} ))
+            if [ "$_quota" -gt 0 ] 2>/dev/null && [ "$_total_usage" -ge "$_quota" ] 2>/dev/null; then
+                status_icon="${RED}${SYM_OK}${NC}"
+                status_text="${RED}quota hit${NC}"
+            else
+                status_icon="${RED}${SYM_OK}${NC}"
+                status_text="${RED}disabled${NC}"
+            fi
+        fi
+
+        # Expiry warning
+        local expiry_info=""
+        local _exp="${SECRETS_EXPIRES[$i]}"
+        if [ "$_exp" != "0" ] && [ -n "$_exp" ]; then
+            local exp_epoch _exp_full="$_exp"
+            [[ "$_exp_full" == *T* ]] || _exp_full="${_exp_full}T23:59:59Z"
+            exp_epoch=$(_iso_to_epoch "$_exp_full" 2>/dev/null) || exp_epoch=0
+            if [ "$exp_epoch" -gt 0 ]; then
+                local now_epoch days_left
+                now_epoch=$(date +%s)
+                days_left=$(( (exp_epoch - now_epoch) / 86400 ))
+                if [ "$days_left" -lt 0 ]; then
+                    expiry_info=" ${RED}(expired)${NC}"
+                elif [ "$days_left" -le 3 ]; then
+                    expiry_info=" ${YELLOW}(${days_left}d left)${NC}"
+                elif [ "$days_left" -le 7 ]; then
+                    expiry_info=" ${DIM}(${days_left}d left)${NC}"
+                fi
+            fi
+        fi
+
+        # Format creation date (use printf builtin when available, fallback to date)
+        local created_fmt
+        created_fmt=$(printf '%(%Y-%m-%d)T' "$created" 2>/dev/null) || \
+            created_fmt=$(date -d "@${created}" '+%Y-%m-%d' 2>/dev/null || echo "unknown")
+
+        # Get per-user traffic from batch-loaded arrays
+        local u_in=${_batch_cum_in["$label"]:-0}
+        local u_out=${_batch_cum_out["$label"]:-0}
+        local traffic_in_fmt traffic_out_fmt
+        traffic_in_fmt=$(format_bytes "$u_in")
+        traffic_out_fmt=$(format_bytes "$u_out")
+
+        printf "  %-4s %-16s ${status_icon} %-8b %-10s %-12s %-12s" \
+            "$((i+1))" "$label" "$status_text" "$created_fmt" "$traffic_in_fmt" "$traffic_out_fmt"
+        echo -e "${expiry_info}"
+
+        # Show note if present
+        [ -n "${SECRETS_NOTES[$i]:-}" ] && echo -e "       ${DIM}📝 ${SECRETS_NOTES[$i]}${NC}"
+    done
+    echo ""
+}
+
+# Rotate a secret (new key, same label)
+secret_rotate() {
+    local label="$1"
+
+    local idx=-1
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        if [ "${SECRETS_LABELS[$i]}" = "$label" ]; then
+            idx=$i
+            break
+        fi
+    done
+
+    if [ $idx -eq -1 ]; then
+        log_error "Secret '${label}' not found"
+        return 1
+    fi
+
+    local new_secret
+    new_secret=$(generate_secret)
+    if [ -z "$new_secret" ] || ! [[ "$new_secret" =~ ^[0-9a-fA-F]{32}$ ]]; then
+        log_error "Failed to generate secret"
+        return 1
+    fi
+    SECRETS_KEYS[$idx]="$new_secret"
+    SECRETS_CREATED[$idx]="$(date +%s)"
+
+    save_secrets
+    reload_proxy_config
+
+    local full_secret
+    full_secret=$(build_faketls_secret "$new_secret")
+    local server_ip
+    server_ip=$(get_public_ip)
+
+    log_success "Secret '${label}' rotated"
+    echo ""
+    echo -e "  ${BOLD}Новая ссылка прокси:${NC}"
+    echo -e "  ${CYAN}tg://proxy?server=${server_ip}&port=${PROXY_PORT}&secret=${full_secret}${NC}"
+    echo ""
+
+    # Notify via Telegram if enabled
+    if [ "$TELEGRAM_ENABLED" = "true" ] && [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+        local msg="🔄 *Secret Rotated*\n\nLabel: \`${label}\`\n📡 Server: \`${server_ip}\`\n🔌 Port: \`${PROXY_PORT}\`\n🔑 Secret: \`${full_secret}\`"
+        telegram_send_message "$msg" &>/dev/null &
+    fi
+}
+
+# Enable/disable a secret
+secret_toggle() {
+    local label="$1" action="${2:-toggle}"
+
+    local idx=-1
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        if [ "${SECRETS_LABELS[$i]}" = "$label" ]; then
+            idx=$i
+            break
+        fi
+    done
+
+    if [ $idx -eq -1 ]; then
+        log_error "Secret '${label}' not found"
+        return 1
+    fi
+
+    local _will_disable=false
+    case "$action" in
+        enable)  SECRETS_ENABLED[$idx]="true" ;;
+        disable) _will_disable=true; SECRETS_ENABLED[$idx]="false" ;;
+        toggle)
+            if [ "${SECRETS_ENABLED[$idx]}" = "true" ]; then
+                _will_disable=true
+                SECRETS_ENABLED[$idx]="false"
+            else
+                SECRETS_ENABLED[$idx]="true"
+            fi
+            ;;
+        *) log_error "Invalid action: $action"; return 1 ;;
+    esac
+
+    # Prevent disabling the last active secret
+    if $_will_disable; then
+        local _en_count=0
+        for i in "${!SECRETS_ENABLED[@]}"; do
+            [ "${SECRETS_ENABLED[$i]}" = "true" ] && _en_count=$((_en_count + 1))
+        done
+        if [ "$_en_count" -eq 0 ]; then
+            # Revert — restore original state
+            SECRETS_ENABLED[$idx]="true"
+            log_error "Cannot disable the last enabled secret — proxy needs at least one"
+            return 1
+        fi
+    fi
+
+    save_secrets
+    reload_proxy_config
+
+    log_success "Secret '${label}' is now ${SECRETS_ENABLED[$idx]}"
+}
+
+# Get proxy link for a specific secret
+get_proxy_link() {
+    local label="${1:-}"
+    local server_ip
+    server_ip=$(get_public_ip)
+
+    # If no label given, use first enabled secret
+    if [ -z "$label" ]; then
+        local i
+        for i in "${!SECRETS_LABELS[@]}"; do
+            if [ "${SECRETS_ENABLED[$i]}" = "true" ]; then
+                label="${SECRETS_LABELS[$i]}"
+                break
+            fi
+        done
+    fi
+
+    [ -z "$label" ] && { log_error "No active secrets"; return 1; }
+
+    local idx=-1
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        [ "${SECRETS_LABELS[$i]}" = "$label" ] && { idx=$i; break; }
+    done
+
+    [ $idx -eq -1 ] && { log_error "Secret '${label}' not found"; return 1; }
+
+    local full_secret
+    full_secret=$(build_faketls_secret "${SECRETS_KEYS[$idx]}")
+
+    echo "tg://proxy?server=${server_ip}&port=${PROXY_PORT}&secret=${full_secret}"
+}
+
+# Get HTTPS proxy link
+get_proxy_link_https() {
+    local label="${1:-}"
+    local link
+    link=$(get_proxy_link "$label") || return 1
+    echo "$link" | sed 's|^tg://proxy|https://t.me/proxy|'
+}
+
+# Set per-user limits for a secret
+secret_set_limits() {
+    local label="$1" max_conns="${2:-}" max_ips="${3:-}" quota="${4:-}" expires="${5:-}" no_restart="${6:-false}"
+
+    local idx=-1
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        if [ "${SECRETS_LABELS[$i]}" = "$label" ]; then
+            idx=$i
+            break
+        fi
+    done
+
+    if [ $idx -eq -1 ]; then
+        log_error "Secret '${label}' not found"
+        return 1
+    fi
+
+    # Update only provided values (validate numeric)
+    if [ -n "$max_conns" ]; then
+        [[ "$max_conns" =~ ^[0-9]+$ ]] || { log_error "Max connections must be a number"; return 1; }
+        [ "$max_conns" -gt 1000000 ] && { log_error "Max connections cannot exceed 1000000"; return 1; }
+        SECRETS_MAX_CONNS[$idx]="$max_conns"
+    fi
+    if [ -n "$max_ips" ]; then
+        [[ "$max_ips" =~ ^[0-9]+$ ]] || { log_error "Max IPs must be a number"; return 1; }
+        [ "$max_ips" -gt 1000000 ] && { log_error "Max IPs cannot exceed 1000000"; return 1; }
+        SECRETS_MAX_IPS[$idx]="$max_ips"
+    fi
+    if [ -n "$quota" ]; then
+        local quota_bytes
+        quota_bytes=$(parse_human_bytes "$quota") || { log_error "Invalid quota format (e.g. 5G, 500M, 0)"; return 1; }
+        SECRETS_QUOTA[$idx]="$quota_bytes"
+    fi
+    if [ -n "$expires" ]; then
+        if [ "$expires" = "0" ] || [ "$expires" = "never" ]; then
+            SECRETS_EXPIRES[$idx]="0"
+        elif [[ "$expires" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            # Date only — append time component for RFC 3339
+            SECRETS_EXPIRES[$idx]="${expires}T23:59:59Z"
+        elif [[ "$expires" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T ]]; then
+            SECRETS_EXPIRES[$idx]="$expires"
+        else
+            log_error "Invalid expiry format (use YYYY-MM-DD or 0 for never)"
+            return 1
+        fi
+    fi
+
+    save_secrets
+
+    if [ "$no_restart" != "true" ]; then
+        reload_proxy_config
+    fi
+
+    log_success "Limits updated for '${label}'"
+    secret_show_limits "$label"
+}
+
+# Edit note/description for a secret
+secret_edit_note() {
+    local label="$1" note="${2:-}"
+
+    local idx=-1 i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        if [ "${SECRETS_LABELS[$i]}" = "$label" ]; then idx=$i; break; fi
+    done
+    [ "$idx" = "-1" ] && { log_error "Secret '${label}' not found"; return 1; }
+
+    # Interactive prompt if no note provided
+    if [ -z "$note" ]; then
+        echo -e "  ${DIM}Текущая заметка: ${SECRETS_NOTES[$idx]:-${DIM}(нет)${NC}}${NC}"
+        echo -en "  ${BOLD}Новая заметка (пусто — очистить):${NC} "
+        read -r note
+    fi
+
+    # Validate: no pipe characters or newlines
+    if [[ "$note" == *"|"* ]]; then
+        log_error "Notes cannot contain the pipe character (|)"
+        return 1
+    fi
+
+    SECRETS_NOTES[$idx]="$note"
+    save_secrets
+    if [ -n "$note" ]; then
+        log_success "Note set for '${label}': ${note}"
+    else
+        log_success "Note cleared for '${label}'"
+    fi
+}
+
+# Re-enable a quota-exceeded secret with optional traffic reset
+secret_reenable() {
+    local label="$1"
+
+    local idx=-1 i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        if [ "${SECRETS_LABELS[$i]}" = "$label" ]; then idx=$i; break; fi
+    done
+    [ "$idx" = "-1" ] && { log_error "Secret '${label}' not found"; return 1; }
+
+    if [ "${SECRETS_ENABLED[$idx]}" = "true" ]; then
+        log_info "Secret '${label}' is already enabled"
+        return 0
+    fi
+
+    # Re-enable
+    SECRETS_ENABLED[$idx]="true"
+    save_secrets
+
+    # Offer quota reset
+    local _quota="${SECRETS_QUOTA[$idx]:-0}"
+    if [ "$_quota" -gt 0 ] 2>/dev/null; then
+        echo -en "  ${BOLD}Сбросить счётчик трафика для квоты? [y/N]:${NC} "
+        local _ans; read -r _ans
+        if [[ "$_ans" =~ ^[yY] ]]; then
+            # Zero the cumulative traffic for this user
+            local _ut="${STATS_DIR}/user_traffic"
+            if [ -f "$_ut" ]; then
+                grep -v "^${label}|" "$_ut" > "${_ut}.tmp" 2>/dev/null || true
+                mv "${_ut}.tmp" "$_ut" 2>/dev/null || true
+            fi
+            # Clear quota alert tracking
+            local _qa="${STATS_DIR}/.quota_alerts_sent"
+            [ -f "$_qa" ] && { grep -v "^${label}|" "$_qa" > "${_qa}.tmp" 2>/dev/null; mv "${_qa}.tmp" "$_qa" 2>/dev/null; } || true
+            log_success "Traffic counter reset for '${label}'"
+        fi
+    fi
+
+    reload_proxy_config
+    log_success "Secret '${label}' re-enabled"
+}
+
+# Reset traffic counters for a secret (or all)
+secret_reset_traffic() {
+    local label="${1:-}"
+    [ -z "$label" ] && { log_error "Использование: mtproxymax secret reset-traffic <метка|all>"; return 1; }
+
+    local _ut="${STATS_DIR}/user_traffic"
+    local _snap="${STATS_DIR}/user_traffic_snapshot"
+    local _qa="${STATS_DIR}/.quota_alerts_sent"
+
+    if [ "$label" = "all" ]; then
+        : > "$_ut" 2>/dev/null || true
+        : > "$_snap" 2>/dev/null || true
+        : > "$_qa" 2>/dev/null || true
+        log_success "Traffic counters reset for all users"
+    else
+        # Verify label exists
+        local found=false i
+        for i in "${!SECRETS_LABELS[@]}"; do
+            [ "${SECRETS_LABELS[$i]}" = "$label" ] && { found=true; break; }
+        done
+        [ "$found" = "false" ] && { log_error "Secret '${label}' not found"; return 1; }
+
+        for f in "$_ut" "$_snap" "$_qa"; do
+            [ -f "$f" ] && { grep -v "^${label}|" "$f" > "${f}.tmp" 2>/dev/null || true; mv "${f}.tmp" "$f" 2>/dev/null || true; }
+        done
+        log_success "Traffic counters reset for '${label}'"
+    fi
+}
+
+# Show limits for a secret
+secret_show_limits() {
+    local label="${1:-}"
+
+    if [ -z "$label" ]; then
+        # Show all
+        echo ""
+        draw_header "USER LIMITS"
+        echo ""
+        printf "  ${BOLD}%-4s %-16s %-10s %-8s %-12s %-14s${NC}\n" "#" "LABEL" "MAX CONN" "MAX IP" "QUOTA" "EXPIRES"
+        echo -e "  ${DIM}$(_repeat '─' 70)${NC}"
+
+        local i
+        for i in "${!SECRETS_LABELS[@]}"; do
+            local conns="${SECRETS_MAX_CONNS[$i]:-0}"
+            local ips="${SECRETS_MAX_IPS[$i]:-0}"
+            local quota="${SECRETS_QUOTA[$i]:-0}"
+            local exp="${SECRETS_EXPIRES[$i]:-0}"
+            local conns_fmt ips_fmt quota_fmt exp_fmt
+            [ "$conns" = "0" ] && conns_fmt="${DIM}∞${NC}" || conns_fmt="$conns"
+            [ "$ips" = "0" ] && ips_fmt="${DIM}∞${NC}" || ips_fmt="$ips"
+            [ "$quota" = "0" ] && quota_fmt="${DIM}∞${NC}" || quota_fmt="$(format_bytes "$quota")"
+            [ "$exp" = "0" ] && exp_fmt="${DIM}never${NC}" || exp_fmt="${exp%%T*}"
+
+            printf "  %-4s %-16s %-10b %-8b %-12b %-14b\n" \
+                "$((i+1))" "${SECRETS_LABELS[$i]}" "$conns_fmt" "$ips_fmt" "$quota_fmt" "$exp_fmt"
+        done
+        echo ""
+        return
+    fi
+
+    local idx=-1
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        [ "${SECRETS_LABELS[$i]}" = "$label" ] && { idx=$i; break; }
+    done
+
+    if [ $idx -eq -1 ]; then
+        log_error "Secret '${label}' not found"
+        return 1
+    fi
+
+    local conns="${SECRETS_MAX_CONNS[$idx]:-0}"
+    local ips="${SECRETS_MAX_IPS[$idx]:-0}"
+    local quota="${SECRETS_QUOTA[$idx]:-0}"
+    local exp="${SECRETS_EXPIRES[$idx]:-0}"
+
+    echo ""
+    echo -e "  ${BOLD}Лимиты для '${label}':${NC}"
+    echo -e "  Max TCP connections:  $([ "$conns" = "0" ] && echo "${DIM}unlimited${NC}" || echo "$conns")"
+    echo -e "  Max unique IPs:       $([ "$ips" = "0" ] && echo "${DIM}unlimited${NC}" || echo "$ips")"
+    echo -e "  Data quota:           $([ "$quota" = "0" ] && echo "${DIM}unlimited${NC}" || echo "$(format_bytes "$quota")")"
+    echo -e "  Expires:              $([ "$exp" = "0" ] && echo "${DIM}never${NC}" || echo "$exp")"
+    echo ""
+}
+
+# ── Section 8b: Upstream Management ──────────────────────────
+
+# Add a new upstream
+upstream_add() {
+    local name="$1" type="$2" addr="${3:-}" user="${4:-}" pass="${5:-}" weight="${6:-10}" iface="${7:-}"
+
+    if [ -z "$name" ] || [ -z "$type" ]; then
+        log_error "Name and type are required"
+        return 1
+    fi
+
+    if ! [[ "$name" =~ ^[a-zA-Z0-9_-]+$ ]] || [ ${#name} -gt 32 ]; then
+        log_error "Name must be alphanumeric (a-z, 0-9, _, -) and max 32 characters"
+        return 1
+    fi
+
+    # Check for duplicate name
+    local i
+    for i in "${!UPSTREAM_NAMES[@]}"; do
+        if [ "${UPSTREAM_NAMES[$i]}" = "$name" ]; then
+            log_error "Upstream '${name}' already exists"
+            return 1
+        fi
+    done
+
+    # Validate type
+    case "$type" in
+        direct|socks5|socks4) ;;
+        *) log_error "Type must be: direct, socks5, or socks4"; return 1 ;;
+    esac
+
+    # Address required for socks types
+    if [ "$type" != "direct" ] && [ -z "$addr" ]; then
+        log_error "Address (host:port) is required for ${type} upstreams"
+        return 1
+    fi
+
+    # Validate address format for non-direct types
+    if [ "$type" != "direct" ] && [ -n "$addr" ]; then
+        if [[ ! "$addr" =~ ^[a-zA-Z0-9._-]+:[0-9]+$ ]]; then
+            log_error "Address must be in host:port format (letters, digits, dots, hyphens only)"
+            return 1
+        fi
+        # Validate port range
+        local addr_port="${addr##*:}"
+        if [ "$addr_port" -lt 1 ] || [ "$addr_port" -gt 65535 ] 2>/dev/null; then
+            log_error "Port must be 1-65535"
+            return 1
+        fi
+    fi
+
+    # Reject pipe, double-quote, backslash in credentials (corrupt file or TOML)
+    if [[ "$user" =~ [|\"\\] ]] || [[ "$pass" =~ [|\"\\] ]]; then
+        log_error "Username/password cannot contain pipe (|), double-quote (\"), or backslash (\\)"
+        return 1
+    fi
+
+    # Reject pipe, double-quote, backslash in interface (corrupt file or TOML)
+    if [[ "$iface" =~ [|\"\\] ]]; then
+        log_error "Interface cannot contain pipe (|), double-quote (\"), or backslash (\\)"
+        return 1
+    fi
+
+    # Validate weight
+    if ! [[ "$weight" =~ ^[0-9]+$ ]] || [ "$weight" -lt 1 ] || [ "$weight" -gt 100 ]; then
+        log_error "Weight must be 1-100"
+        return 1
+    fi
+
+    # Warn if password provided for SOCKS4 (protocol only supports user_id)
+    if [ "$type" = "socks4" ] && [ -n "$pass" ]; then
+        log_warn "SOCKS4 does not support passwords — only username (user_id) will be used"
+        pass=""
+    fi
+
+    UPSTREAM_NAMES+=("$name")
+    UPSTREAM_TYPES+=("$type")
+    UPSTREAM_ADDRS+=("$addr")
+    UPSTREAM_USERS+=("$user")
+    UPSTREAM_PASSES+=("$pass")
+    UPSTREAM_WEIGHTS+=("$weight")
+    UPSTREAM_IFACES+=("$iface")
+    UPSTREAM_ENABLED+=("true")
+
+    save_upstreams
+
+    if is_proxy_running; then
+        restart_proxy_container
+    fi
+
+    log_success "Upstream '${name}' added (${type})"
+}
+
+# Remove an upstream
+upstream_remove() {
+    local name="$1"
+
+    if [ ${#UPSTREAM_NAMES[@]} -le 1 ]; then
+        log_error "Cannot remove the last upstream — at least one is required"
+        return 1
+    fi
+
+    local idx=-1
+    local i
+    for i in "${!UPSTREAM_NAMES[@]}"; do
+        [ "${UPSTREAM_NAMES[$i]}" = "$name" ] && { idx=$i; break; }
+    done
+
+    if [ $idx -eq -1 ]; then
+        log_error "Upstream '${name}' not found"
+        return 1
+    fi
+
+    # Prevent removing the last enabled upstream
+    if [ "${UPSTREAM_ENABLED[$idx]}" = "true" ]; then
+        local enabled_count=0
+        for i in "${!UPSTREAM_ENABLED[@]}"; do
+            [ "$i" -eq "$idx" ] && continue
+            [ "${UPSTREAM_ENABLED[$i]}" = "true" ] && enabled_count=$((enabled_count + 1))
+        done
+        if [ "$enabled_count" -eq 0 ]; then
+            log_error "Cannot remove the last enabled upstream — proxy needs at least one"
+            return 1
+        fi
+    fi
+
+    # Rebuild arrays without the removed entry
+    local -a nn=() nt=() na=() nu=() np=() nw=() ni=() ne=()
+    for i in "${!UPSTREAM_NAMES[@]}"; do
+        [ "$i" -eq "$idx" ] && continue
+        nn+=("${UPSTREAM_NAMES[$i]}")
+        nt+=("${UPSTREAM_TYPES[$i]}")
+        na+=("${UPSTREAM_ADDRS[$i]}")
+        nu+=("${UPSTREAM_USERS[$i]}")
+        np+=("${UPSTREAM_PASSES[$i]}")
+        nw+=("${UPSTREAM_WEIGHTS[$i]}")
+        ni+=("${UPSTREAM_IFACES[$i]}")
+        ne+=("${UPSTREAM_ENABLED[$i]}")
+    done
+    UPSTREAM_NAMES=("${nn[@]}")
+    UPSTREAM_TYPES=("${nt[@]}")
+    UPSTREAM_ADDRS=("${na[@]}")
+    UPSTREAM_USERS=("${nu[@]}")
+    UPSTREAM_PASSES=("${np[@]}")
+    UPSTREAM_WEIGHTS=("${nw[@]}")
+    UPSTREAM_IFACES=("${ni[@]}")
+    UPSTREAM_ENABLED=("${ne[@]}")
+
+    save_upstreams
+
+    if is_proxy_running; then
+        restart_proxy_container
+    fi
+
+    log_success "Upstream '${name}' removed"
+}
+
+# List all upstreams
+upstream_list() {
+    load_upstreams
+
+    echo ""
+    draw_header "UPSTREAMS"
+    echo ""
+    printf "  ${BOLD}%-4s %-18s %-8s %-24s %-8s %-10s${NC}\n" "#" "NAME" "TYPE" "ADDRESS" "WEIGHT" "STATUS"
+    echo -e "  ${DIM}$(_repeat '─' 76)${NC}"
+
+    local i
+    for i in "${!UPSTREAM_NAMES[@]}"; do
+        local name="${UPSTREAM_NAMES[$i]}"
+        local type="${UPSTREAM_TYPES[$i]}"
+        local addr="${UPSTREAM_ADDRS[$i]}"
+        local weight="${UPSTREAM_WEIGHTS[$i]}"
+        local iface="${UPSTREAM_IFACES[$i]}"
+        local enabled="${UPSTREAM_ENABLED[$i]}"
+        local status_icon addr_fmt
+
+        [ -z "$addr" ] && addr_fmt="${DIM}—${NC}" || addr_fmt="$addr"
+        [ -n "$iface" ] && addr_fmt="${addr_fmt} ${DIM}(${iface})${NC}"
+
+        if [ "$enabled" = "true" ]; then
+            status_icon="${GREEN}${SYM_OK} active${NC}"
+        else
+            status_icon="${RED}${SYM_CROSS} disabled${NC}"
+        fi
+
+        printf "  %-4s %-18s %-8s %-24b %-8s %-10b\n" \
+            "$((i+1))" "$name" "$type" "$addr_fmt" "$weight" "$status_icon"
+    done
+    echo ""
+}
+
+# Enable/disable an upstream
+upstream_toggle() {
+    local name="$1" action="${2:-toggle}"
+
+    local idx=-1
+    local i
+    for i in "${!UPSTREAM_NAMES[@]}"; do
+        [ "${UPSTREAM_NAMES[$i]}" = "$name" ] && { idx=$i; break; }
+    done
+
+    if [ $idx -eq -1 ]; then
+        log_error "Upstream '${name}' not found"
+        return 1
+    fi
+
+    # Check if this would leave zero enabled upstreams
+    local _will_disable=false
+    case "$action" in
+        disable) [ "${UPSTREAM_ENABLED[$idx]}" = "true" ] && _will_disable=true ;;
+        toggle)  [ "${UPSTREAM_ENABLED[$idx]}" = "true" ] && _will_disable=true ;;
+    esac
+    if $_will_disable; then
+        local enabled_count=0
+        for i in "${!UPSTREAM_ENABLED[@]}"; do
+            [ "${UPSTREAM_ENABLED[$i]}" = "true" ] && enabled_count=$((enabled_count + 1))
+        done
+        if [ "$enabled_count" -le 1 ]; then
+            log_error "Cannot disable the last enabled upstream — proxy needs at least one"
+            return 1
+        fi
+    fi
+
+    case "$action" in
+        enable)  UPSTREAM_ENABLED[$idx]="true" ;;
+        disable) UPSTREAM_ENABLED[$idx]="false" ;;
+        toggle)
+            if [ "${UPSTREAM_ENABLED[$idx]}" = "true" ]; then
+                UPSTREAM_ENABLED[$idx]="false"
+            else
+                UPSTREAM_ENABLED[$idx]="true"
+            fi
+            ;;
+        *) log_error "Action must be: enable, disable, or toggle"; return 1 ;;
+    esac
+
+    save_upstreams
+
+    if is_proxy_running; then
+        restart_proxy_container
+    fi
+
+    local _state="disabled"; [ "${UPSTREAM_ENABLED[$idx]}" = "true" ] && _state="enabled"
+    log_success "Upstream '${name}' is now ${_state}"
+}
+
+# Test upstream connectivity
+upstream_test() {
+    local name="$1"
+
+    local idx=-1
+    local i
+    for i in "${!UPSTREAM_NAMES[@]}"; do
+        [ "${UPSTREAM_NAMES[$i]}" = "$name" ] && { idx=$i; break; }
+    done
+
+    if [ $idx -eq -1 ]; then
+        log_error "Upstream '${name}' not found"
+        return 1
+    fi
+
+    local type="${UPSTREAM_TYPES[$idx]}"
+    local addr="${UPSTREAM_ADDRS[$idx]}"
+    local iface="${UPSTREAM_IFACES[$idx]}"
+    local iface_opt=()
+    [ -n "$iface" ] && iface_opt=(--interface "$iface")
+
+    if [ "$type" = "direct" ]; then
+        log_info "Testing direct connection..."
+        local result
+        if result=$(curl -sf --max-time 10 "${iface_opt[@]}" https://api.ipify.org 2>/dev/null) && [[ "$result" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            log_success "Direct connection OK — External IP: ${result}"
+        else
+            log_error "Direct connection failed"
+            return 1
+        fi
+        return 0
+    fi
+
+    if [ -z "$addr" ]; then
+        log_error "No address configured for '${name}'"
+        return 1
+    fi
+
+    log_info "Testing ${type} proxy at ${addr}..."
+
+    local proxy_url
+    local proxy_user="${UPSTREAM_USERS[$idx]}"
+    local proxy_pass="${UPSTREAM_PASSES[$idx]}"
+
+    if [ "$type" = "socks4" ] && [ -n "$proxy_user" ]; then
+        # SOCKS4 uses user_id only (no password)
+        proxy_url="socks4://${proxy_user}@${addr}"
+    elif [ -n "$proxy_user" ] && [ -n "$proxy_pass" ]; then
+        proxy_url="${type}://${proxy_user}:${proxy_pass}@${addr}"
+    elif [ -n "$proxy_user" ]; then
+        proxy_url="${type}://${proxy_user}@${addr}"
+    else
+        proxy_url="${type}://${addr}"
+    fi
+
+    # socks5 -> socks5h for remote DNS resolution
+    proxy_url="${proxy_url/socks5:\/\//socks5h:\/\/}"
+
+    local result
+    if result=$(curl -sf --max-time 15 "${iface_opt[@]}" -x "$proxy_url" https://api.ipify.org 2>/dev/null) && [[ "$result" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_success "${type} proxy OK — Exit IP: ${result}"
+    else
+        log_error "${type} proxy at ${addr} failed"
+        return 1
+    fi
+}
+
+# ── Section 9: Container Management ─────────────────────────
+
+is_proxy_running() {
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$" || return 1
+    return 0
+}
+
+run_proxy_container() {
+    # Build telemt image if not present
+    build_telemt_image || {
+        log_error "Failed to build telemt image"
+        return 1
+    }
+
+    # Ensure we have at least one secret
+    if [ ${#SECRETS_LABELS[@]} -eq 0 ]; then
+        log_info "No secrets configured, generating default..."
+        secret_add "default"
+    fi
+
+    # Generate config
+    generate_telemt_config
+
+    # Check port availability
+    if ! is_port_available "$PROXY_PORT"; then
+        # Check if it's our own container
+        if is_proxy_running; then
+            log_info "Port ${PROXY_PORT} is in use by MTProxyMax"
+        else
+            log_error "Port ${PROXY_PORT} is already in use by another process"
+            return 1
+        fi
+    fi
+
+    # Remove existing container
+    docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+
+    # Run container
+    log_info "Starting telemt proxy on port ${PROXY_PORT}..."
+
+    local _docker_args=(
+        --name "$CONTAINER_NAME"
+        --restart unless-stopped
+        --network host
+        --log-opt max-size=10m
+        --log-opt max-file=3
+    )
+    [ -n "${PROXY_CPUS}" ] && _docker_args+=(--cpus "${PROXY_CPUS}")
+    [ -n "${PROXY_MEMORY}" ] && _docker_args+=(--memory "${PROXY_MEMORY}" --memory-swap "${PROXY_MEMORY}")
+
+    docker run -d "${_docker_args[@]}" \
+        --ulimit nofile=65535:65535 \
+        -v "${CONFIG_DIR}/config.toml:/etc/telemt.toml:ro" \
+        "$(get_docker_image)" /etc/telemt.toml \
+        &>/dev/null || {
+            log_error "Failed to start container"
+            return 1
+        }
+
+    # Wait for startup
+    sleep 2
+
+    if is_proxy_running; then
+        log_success "Прокси запущен на порту ${PROXY_PORT}"
+        traffic_tracking_setup
+        geoblock_reapply_all
+
+        # Show links for all enabled secrets
+        local server_ip
+        server_ip=$(get_public_ip)
+        if [ -n "$server_ip" ]; then
+            echo ""
+            local i
+            for i in "${!SECRETS_LABELS[@]}"; do
+                [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+                local full_secret
+                full_secret=$(build_faketls_secret "${SECRETS_KEYS[$i]}")
+                echo -e "  ${BOLD}${SECRETS_LABELS[$i]}:${NC} ${CYAN}tg://proxy?server=${server_ip}&port=${PROXY_PORT}&secret=${full_secret}${NC}"
+            done
+            echo ""
+        fi
+
+        # Notify via Telegram
+        telegram_notify_proxy_started &>/dev/null &
+        return 0
+    else
+        log_error "Container started but is not running — check logs"
+        echo -e "  ${DIM}Запуск: docker logs ${CONTAINER_NAME}${NC}"
+        return 1
+    fi
+}
+
+stop_proxy_container() {
+    if is_proxy_running; then
+        # Flush traffic counters to disk before stopping
+        flush_traffic_to_disk 2>/dev/null
+        if docker stop --timeout 10 "$CONTAINER_NAME" 2>/dev/null; then
+            traffic_tracking_teardown
+            log_success "Proxy stopped"
+        else
+            log_error "Failed to stop proxy"
+            return 1
+        fi
+    else
+        log_info "Прокси не запущен"
+    fi
+    # Also stop secondary instances
+    _stop_all_instances 2>/dev/null
+}
+
+_stop_all_instances() {
+    [ -f "$INSTANCES_FILE" ] || return 0
+    load_instances 2>/dev/null
+    local i
+    for i in "${!INSTANCE_PORTS[@]}"; do
+        docker stop --timeout 10 "mtproxymax-${INSTANCE_PORTS[$i]}" &>/dev/null || true
+    done
+}
+
+_start_all_instances() {
+    [ -f "$INSTANCES_FILE" ] || return 0
+    load_instances 2>/dev/null
+    local i
+    for i in "${!INSTANCE_PORTS[@]}"; do
+        [ "${INSTANCE_ENABLED[$i]}" = "true" ] || continue
+        local cname="mtproxymax-${INSTANCE_PORTS[$i]}"
+        docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${cname}$" && continue
+        # Regenerate instance config
+        local inst_config="${CONFIG_DIR}/config-${INSTANCE_PORTS[$i]}.toml"
+        if [ -f "$inst_config" ]; then
+            docker rm -f "$cname" &>/dev/null || true
+            docker run -d --name "$cname" --restart unless-stopped --network host \
+                --ulimit nofile=65535:65535 --log-opt max-size=10m --log-opt max-file=3 \
+                -v "${inst_config}:/etc/telemt.toml:ro" \
+                "$(get_docker_image)" /etc/telemt.toml &>/dev/null
+        fi
+    done
+}
+
+start_proxy_container() {
+    if is_proxy_running; then
+        log_info "Proxy is already running"
+        return 0
+    fi
+
+    # Always recreate container to ensure settings (port, memory, cpus) are current
+    docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+    run_proxy_container
+    # Also start secondary instances
+    _start_all_instances 2>/dev/null
+}
+
+restart_proxy_container() {
+    stop_proxy_container 2>/dev/null || true
+    docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+    run_proxy_container
+    _start_all_instances 2>/dev/null
+}
+
+# Hot-reload: rewrite config.toml and let the engine pick it up (no restart, no dropped connections)
+# Use this for secret/limit changes. Falls back to restart if container is not running.
+reload_proxy_config() {
+    generate_telemt_config || { log_error "Config generation failed"; return 1; }
+
+    # Signal primary container to reload config (inotify may miss bind-mount changes)
+    is_proxy_running && docker kill -s SIGHUP "$CONTAINER_NAME" 2>/dev/null || true
+
+    # Also reload secondary instances if any
+    if [ -f "$INSTANCES_FILE" ]; then
+        load_instances 2>/dev/null
+        local i _orig_port="$PROXY_PORT" _orig_mport="$PROXY_METRICS_PORT"
+        for i in "${!INSTANCE_PORTS[@]}"; do
+            [ "${INSTANCE_ENABLED[$i]}" = "true" ] || continue
+            local inst_config="${CONFIG_DIR}/config-${INSTANCE_PORTS[$i]}.toml"
+            PROXY_PORT="${INSTANCE_PORTS[$i]}"
+            PROXY_METRICS_PORT="${INSTANCE_METRICS_PORTS[$i]}"
+            generate_telemt_config
+            mv "${CONFIG_DIR}/config.toml" "$inst_config" 2>/dev/null
+            docker kill -s SIGHUP "mtproxymax-${INSTANCE_PORTS[$i]}" 2>/dev/null || true
+        done
+        PROXY_PORT="$_orig_port"
+        PROXY_METRICS_PORT="$_orig_mport"
+        # Regenerate primary config (was overwritten by last instance)
+        generate_telemt_config
+    fi
+
+    log_info "Config reloaded (hot-reload, no restart)"
+}
+
+# Parse ISO 8601 timestamp to epoch (portable: GNU date, busybox date, Python fallback)
+_iso_to_epoch() {
+    local ts="$1"
+    [ -z "$ts" ] && { echo "0"; return; }
+    # Strip sub-second precision only, keep Z for UTC (e.g. 2026-03-03T10:00:00.123456789Z -> 2026-03-03T10:00:00Z)
+    local ts_clean="${ts%%.*}"
+    # Restore trailing Z if original had it
+    [[ "$ts" == *Z ]] && ts_clean="${ts_clean}Z"
+    local epoch
+    # GNU date: handles ISO 8601 with Z correctly
+    epoch=$(date -d "${ts_clean}" +%s 2>/dev/null) && [ "$epoch" -gt 0 ] 2>/dev/null && { echo "$epoch"; return; }
+    # Busybox date: strip Z, use explicit format
+    local ts_bb="${ts_clean%Z}"
+    epoch=$(date -D '%Y-%m-%dT%H:%M:%S' -d "${ts_bb}" +%s 2>/dev/null) && [ "$epoch" -gt 0 ] 2>/dev/null && { echo "$epoch"; return; }
+    echo "0"
+}
+
+# Get container uptime
+get_proxy_uptime() {
+    if ! is_proxy_running; then
+        echo "0"
+        return
+    fi
+    local started_at
+    started_at=$(docker inspect --format '{{.State.StartedAt}}' "$CONTAINER_NAME" 2>/dev/null)
+    [ -z "$started_at" ] && { echo "0"; return; }
+
+    local start_epoch now_epoch
+    start_epoch=$(_iso_to_epoch "$started_at")
+    now_epoch=$(date +%s)
+    [ "$start_epoch" -gt 0 ] 2>/dev/null && echo $((now_epoch - start_epoch)) || echo "0"
+}
+
+# ── Section 10: QR Code Generation ──────────────────────────
+
+show_qr() {
+    local link="$1"
+    [ -z "$link" ] && { log_error "No link provided"; return 1; }
+
+    if command -v qrencode &>/dev/null; then
+        echo ""
+        echo -e "  ${BOLD}Отсканируйте этот QR-код в Telegram:${NC}"
+        echo ""
+        qrencode -t ANSIUTF8 "$link" | sed 's/^/  /'
+    elif docker run --rm -e QR_DATA="$link" alpine:latest sh -c 'apk add --no-cache qrencode >/dev/null 2>&1 && qrencode -t ANSIUTF8 "$QR_DATA"' 2>/dev/null | sed 's/^/  /'; then
+        :
+    else
+        echo ""
+        echo -e "  ${YELLOW}QR-код недоступен (установите qrencode для поддержки QR)${NC}"
+        echo -e "  ${DIM}Установка: apt install qrencode${NC}"
+    fi
+
+    echo ""
+    echo -e "  ${BOLD}Поделитесь этой ссылкой:${NC}"
+    echo -e "  ${CYAN}${link}${NC}"
+    echo ""
+}
+
+# Generate QR code URL (for Telegram photo messages)
+generate_qr_url() {
+    local link="$1"
+    local encoded
+    encoded=$(printf '%s' "$link" | sed 's/&/%26/g; s/?/%3F/g; s/=/%3D/g; s/:/%3A/g; s|/|%2F|g')
+    echo "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encoded}"
+}
+
+# ── Section 11: Geo-Blocking ────────────────────────────────
+
+GEOBLOCK_CACHE_DIR="${INSTALL_DIR}/geoblock"
+GEOBLOCK_IPSET_PREFIX="mtpmax_"
+GEOBLOCK_COMMENT="mtproxymax-geoblock"
+
+# Ensure ipset is installed
+_ensure_ipset() {
+    command -v ipset &>/dev/null && return 0
+    log_info "Installing ipset..."
+    local os; os=$(detect_os)
+    case "$os" in
+        debian) apt-get install -y -qq ipset ;;
+        rhel)   yum install -y -q ipset ;;
+        alpine) apk add --no-cache ipset ;;
+    esac
+    command -v ipset &>/dev/null || { log_error "Failed to install ipset"; return 1; }
+}
+
+# Download and cache CIDR list for a country
+_download_country_cidrs() {
+    local code="$1"
+    local cache_file="${GEOBLOCK_CACHE_DIR}/${code}.zone"
+    mkdir -p "$GEOBLOCK_CACHE_DIR"
+
+    # Use cached file if less than 24 hours old
+    if [ -f "$cache_file" ] && [ $(( $(date +%s) - $(stat -c %Y "$cache_file" 2>/dev/null || echo 0) )) -lt 86400 ]; then
+        return 0
+    fi
+
+    log_info "Downloading IP list for ${code^^}..."
+    local url="https://www.ipdeny.com/ipblocks/data/aggregated/${code}-aggregated.zone"
+    if ! curl -fsSL --max-time 30 "$url" -o "$cache_file" 2>/dev/null; then
+        rm -f "$cache_file"
+        log_error "Failed to download IP list for ${code^^} — check country code"
+        return 1
+    fi
+
+    local count; count=$(wc -l < "$cache_file")
+    log_info "Downloaded ${count} IP ranges for ${code^^}"
+}
+
+# Apply iptables/ipset rules for one country
+_apply_country_rules() {
+    local code="$1"
+    local setname="${GEOBLOCK_IPSET_PREFIX}${code}"
+    local cache_file="${GEOBLOCK_CACHE_DIR}/${code}.zone"
+
+    [ -f "$cache_file" ] || { log_error "No cached IP list for ${code}"; return 1; }
+
+    # Create if not exists, then flush to clear stale entries
+    ipset create -exist "$setname" hash:net family inet maxelem 131072
+    ipset flush "$setname"
+
+    # Batch load all CIDRs via ipset restore (fast, single pass)
+    awk -v s="$setname" 'NF && !/^#/ { print "add " s " " $1 }' "$cache_file" \
+        | ipset restore -exist
+
+    if [ "$GEOBLOCK_MODE" = "whitelist" ]; then
+        # Whitelist: ACCEPT matching countries
+        if ! iptables -C INPUT -m set --match-set "$setname" src \
+            -p tcp --dport "$PROXY_PORT" \
+            -m comment --comment "$GEOBLOCK_COMMENT" -j ACCEPT 2>/dev/null; then
+            iptables -I INPUT -m set --match-set "$setname" src \
+                -p tcp --dport "$PROXY_PORT" \
+                -m comment --comment "$GEOBLOCK_COMMENT" -j ACCEPT
+        fi
+    else
+        # Blacklist: DROP matching countries
+        if ! iptables -C INPUT -m set --match-set "$setname" src \
+            -p tcp --dport "$PROXY_PORT" \
+            -m comment --comment "$GEOBLOCK_COMMENT" -j DROP 2>/dev/null; then
+            iptables -I INPUT -m set --match-set "$setname" src \
+                -p tcp --dport "$PROXY_PORT" \
+                -m comment --comment "$GEOBLOCK_COMMENT" -j DROP
+        fi
+    fi
+
+    log_success "Geo-${GEOBLOCK_MODE} active for ${code^^} (port ${PROXY_PORT})"
+}
+
+# Remove iptables rules and ipset for one country
+_remove_country_rules() {
+    local code="$1"
+    local setname="${GEOBLOCK_IPSET_PREFIX}${code}"
+
+    # Remove iptables rule (try both DROP and ACCEPT for mode compatibility)
+    iptables -D INPUT -m set --match-set "$setname" src \
+        -p tcp --dport "$PROXY_PORT" \
+        -m comment --comment "$GEOBLOCK_COMMENT" -j DROP 2>/dev/null || true
+    iptables -D INPUT -m set --match-set "$setname" src \
+        -p tcp --dport "$PROXY_PORT" \
+        -m comment --comment "$GEOBLOCK_COMMENT" -j ACCEPT 2>/dev/null || true
+
+    # Destroy ipset
+    ipset destroy "$setname" 2>/dev/null || true
+}
+
+# Remove whitelist default-DROP rule
+_remove_default_drop() {
+    iptables -D INPUT -p tcp --dport "$PROXY_PORT" \
+        -m comment --comment "${GEOBLOCK_COMMENT}-default" -j DROP 2>/dev/null || true
+}
+
+# Add whitelist default-DROP rule if in whitelist mode and countries exist
+_ensure_default_drop() {
+    [ "$GEOBLOCK_MODE" = "whitelist" ] || return 0
+    [ -n "$BLOCKLIST_COUNTRIES" ] || return 0
+    if ! iptables -C INPUT -p tcp --dport "$PROXY_PORT" \
+        -m comment --comment "${GEOBLOCK_COMMENT}-default" -j DROP 2>/dev/null; then
+        iptables -A INPUT -p tcp --dport "$PROXY_PORT" \
+            -m comment --comment "${GEOBLOCK_COMMENT}-default" -j DROP
+    fi
+}
+
+# Reapply all saved geoblock rules (called on proxy start)
+geoblock_reapply_all() {
+    [ -z "$BLOCKLIST_COUNTRIES" ] && return 0
+    command -v ipset &>/dev/null || return 0
+
+    local code
+    IFS=',' read -ra codes <<< "$BLOCKLIST_COUNTRIES"
+    for code in "${codes[@]}"; do
+        [ -z "$code" ] && continue
+        if [ -f "${GEOBLOCK_CACHE_DIR}/${code}.zone" ]; then
+            _apply_country_rules "$code" &>/dev/null || true
+        fi
+    done
+
+    # Whitelist mode: add default DROP for proxy port at the end (after all ACCEPTs)
+    _ensure_default_drop
+
+    # Apply same rules to secondary instance ports
+    if [ -f "$INSTANCES_FILE" ]; then
+        load_instances 2>/dev/null
+        local _orig_port="$PROXY_PORT" i
+        for i in "${!INSTANCE_PORTS[@]}"; do
+            [ "${INSTANCE_ENABLED[$i]}" = "true" ] || continue
+            PROXY_PORT="${INSTANCE_PORTS[$i]}"
+            for code in "${codes[@]}"; do
+                [ -z "$code" ] && continue
+                [ -f "${GEOBLOCK_CACHE_DIR}/${code}.zone" ] && _apply_country_rules "$code" &>/dev/null || true
+            done
+            _ensure_default_drop
+        done
+        PROXY_PORT="$_orig_port"
+    fi
+}
+
+# Remove ALL mtproxymax geoblock rules (called on uninstall)
+geoblock_remove_all() {
+    # Remove all tagged iptables rules (both geoblock and geoblock-default)
+    if command -v iptables &>/dev/null; then
+        iptables-save 2>/dev/null | grep -E -- "--comment ${GEOBLOCK_COMMENT}(-default)?" | \
+            sed 's/^-A/-D/' | while IFS= read -r rule; do
+                iptables $rule 2>/dev/null || true
+            done
+    fi
+
+    # Destroy all mtpmax_ ipsets
+    if command -v ipset &>/dev/null; then
+        ipset list -n 2>/dev/null | grep "^${GEOBLOCK_IPSET_PREFIX}" | \
+            while IFS= read -r setname; do
+                ipset destroy "$setname" 2>/dev/null || true
+            done
+    fi
+}
+
+build_blocklist_config() {
+    [ -z "$BLOCKLIST_COUNTRIES" ] && return
+    geoblock_reapply_all
+}
+
+show_geoblock_menu() {
+    while true; do
+        clear_screen
+        draw_header "GEO-BLOCKING"
+        echo ""
+        echo -e "  ${BOLD}Режим:${NC}      ${GEOBLOCK_MODE}"
+        echo -e "  ${BOLD}Страны:${NC} ${BLOCKLIST_COUNTRIES:-${DIM}нет${NC}}"
+        echo ""
+        echo -e "  ${DIM}[1]${NC} Добавить страну"
+        echo -e "  ${DIM}[2]${NC} Удалить страну"
+        echo -e "  ${DIM}[3]${NC} Очистить всё"
+        echo -e "  ${DIM}[4]${NC} Сменить режим (чёрный/белый список)"
+        echo -e "  ${DIM}[0]${NC} Назад"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+
+        case "$choice" in
+            1)
+                echo ""
+                echo -e "  ${BOLD}Частые коды стран:${NC}"
+                echo -e "  US DE NL FR GB SG JP CA AU KR CN RU IR"
+                echo ""
+                echo -en "  ${BOLD}Введите country code (2 letters):${NC} "
+                local code
+                read -r code
+                code=$(echo "$code" | tr '[:upper:]' '[:lower:]')
+                if [[ "$code" =~ ^[a-z]{2}$ ]]; then
+                    if echo ",$BLOCKLIST_COUNTRIES," | grep -q ",${code},"; then
+                        log_info "Country '${code}' is already in the list"
+                    else
+                        _ensure_ipset && _download_country_cidrs "$code" && {
+                            [ -z "$BLOCKLIST_COUNTRIES" ] && BLOCKLIST_COUNTRIES="$code" || BLOCKLIST_COUNTRIES="${BLOCKLIST_COUNTRIES},${code}"
+                            save_settings
+                            _apply_country_rules "$code"
+                            _ensure_default_drop
+                        }
+                    fi
+                else
+                    log_error "Invalid country code (use 2-letter ISO code, e.g. us, de, ir)"
+                fi
+                press_any_key
+                ;;
+            2)
+                echo -en "  ${BOLD}Country code to remove:${NC} "
+                local rm_code
+                read -r rm_code
+                rm_code=$(echo "$rm_code" | tr '[:upper:]' '[:lower:]')
+                if [[ "$rm_code" =~ ^[a-z]{2}$ ]]; then
+                    if echo ",$BLOCKLIST_COUNTRIES," | grep -q ",${rm_code},"; then
+                        BLOCKLIST_COUNTRIES=$(echo ",$BLOCKLIST_COUNTRIES," | sed "s/,${rm_code},/,/g;s/^,//;s/,$//")
+                        save_settings
+                        _remove_country_rules "$rm_code"
+                        rm -f "${GEOBLOCK_CACHE_DIR}/${rm_code}.zone"
+                        # Remove default-DROP if no countries left in whitelist mode
+                        [ -z "$BLOCKLIST_COUNTRIES" ] && _remove_default_drop
+                        log_success "Removed ${rm_code^^} — rules and cache cleared"
+                    else
+                        log_info "Country '${rm_code}' is not in the list"
+                    fi
+                else
+                    log_error "Invalid country code (use 2-letter ISO code)"
+                fi
+                press_any_key
+                ;;
+            3)
+                local code
+                IFS=',' read -ra codes <<< "$BLOCKLIST_COUNTRIES"
+                for code in "${codes[@]}"; do
+                    [ -z "$code" ] && continue
+                    _remove_country_rules "$code"
+                    rm -f "${GEOBLOCK_CACHE_DIR}/${code}.zone"
+                done
+                _remove_default_drop
+                BLOCKLIST_COUNTRIES=""
+                save_settings
+                log_success "All geo-blocks cleared"
+                press_any_key
+                ;;
+            4)
+                # Remove all current rules before switching mode
+                geoblock_remove_all
+                _remove_default_drop
+                # Toggle mode
+                [ "$GEOBLOCK_MODE" = "blacklist" ] && GEOBLOCK_MODE="whitelist" || GEOBLOCK_MODE="blacklist"
+                save_settings
+                # Reapply rules in new mode
+                [ -n "$BLOCKLIST_COUNTRIES" ] && geoblock_reapply_all
+                log_success "Geo-blocking mode: ${GEOBLOCK_MODE}"
+                press_any_key
+                ;;
+            0|"") return ;;
+            *) ;;
+        esac
+    done
+}
+
+# ── Section 12: Health Monitoring ────────────────────────────
+
+health_check() {
+    echo ""
+    draw_header "HEALTH CHECK"
+    echo ""
+
+    # Docker status
+    if command -v docker &>/dev/null; then
+        echo -e "  Docker:      $(draw_status running 'Installed')"
+    else
+        echo -e "  Docker:      $(draw_status stopped 'Not installed')"
+        return 1
+    fi
+
+    # Container status
+    if is_proxy_running; then
+        echo -e "  Container:   $(draw_status running 'Running')"
+    else
+        echo -e "  Container:   $(draw_status stopped 'Stopped')"
+    fi
+
+    # Port check
+    if is_port_available "$PROXY_PORT"; then
+        if is_proxy_running; then
+            echo -e "  Port ${PROXY_PORT}:     $(draw_status stopped 'Not listening')"
+        else
+            echo -e "  Port ${PROXY_PORT}:     $(draw_status true 'Available')"
+        fi
+    else
+        echo -e "  Port ${PROXY_PORT}:     $(draw_status running 'Listening')"
+    fi
+
+    # Metrics endpoint
+    if curl -s --max-time 2 "http://127.0.0.1:${PROXY_METRICS_PORT}/metrics" &>/dev/null; then
+        echo -e "  Metrics:     $(draw_status running 'Responding')"
+    else
+        echo -e "  Metrics:     $(draw_status stopped 'Not available')"
+    fi
+
+    # Telegram bot
+    if [ "$TELEGRAM_ENABLED" = "true" ]; then
+        echo -e "  Telegram:    $(draw_status running 'Enabled')"
+    else
+        echo -e "  Telegram:    $(draw_status disabled 'Disabled')"
+    fi
+
+    echo ""
+}
+
+auto_recover() {
+    if ! is_proxy_running; then
+        log_warn "Proxy is down, attempting auto-recovery..."
+        start_proxy_container
+    fi
+}
+
+# ── Section 13: Auto-Update ─────────────────────────────────
+
+_UPDATE_SHA_FILE="${INSTALL_DIR}/.update_sha"
+_UPDATE_BADGE="/tmp/.mtproxymax_update_available"
+
+# Background SHA check — non-blocking, ~40 bytes over the wire
+check_update_sha_bg() {
+    {
+        local _remote_sha
+        _remote_sha=$(curl -fsSL --connect-timeout 5 --max-time 10 \
+            "https://api.github.com/repos/${GITHUB_REPO}/commits/main" \
+            -H "Accept: application/vnd.github.sha" 2>/dev/null) || true
+
+        # Must be 40 lowercase hex chars
+        if [ -n "$_remote_sha" ] && [ ${#_remote_sha} -ge 40 ]; then
+            _remote_sha="${_remote_sha:0:40}"
+            case "$_remote_sha" in *[!a-f0-9]*) exit 0 ;; esac
+
+            local _stored=""
+            [ -f "$_UPDATE_SHA_FILE" ] && _stored=$(<"$_UPDATE_SHA_FILE")
+
+            if [ -z "$_stored" ]; then
+                # First run — save baseline, no badge
+                echo "$_remote_sha" > "$_UPDATE_SHA_FILE" 2>/dev/null || true
+                rm -f "$_UPDATE_BADGE" 2>/dev/null
+            elif [ "$_remote_sha" != "$_stored" ]; then
+                echo "new" > "$_UPDATE_BADGE" 2>/dev/null
+            else
+                rm -f "$_UPDATE_BADGE" 2>/dev/null
+            fi
+        fi
+        # API unreachable — do nothing; badge stays as-is (no false positives)
+    } &
+}
+
+self_update() {
+    # Prevent concurrent updates
+    if command -v flock &>/dev/null; then
+        local _lfd
+        exec {_lfd}>/tmp/.mtproxymax_update.lock
+        if ! flock -n "$_lfd" 2>/dev/null; then
+            log_warn "Another update is already running."
+            return 1
+        fi
+    fi
+
+    local _script_updated=false
+    local _url="https://raw.githubusercontent.com/${GITHUB_REPO}/main/mtproxymax.sh"
+
+    echo ""
+    log_info "Checking for script updates..."
+
+    local _tmp
+    _tmp=$(_mktemp) || return 1
+
+    if curl -fsSL --max-time 60 --max-filesize 5242880 -o "$_tmp" "$_url" 2>/dev/null; then
+        # Validate: bash syntax + sanity check
+        if ! bash -n "$_tmp" 2>/dev/null; then
+            log_error "Downloaded script has syntax errors — aborting"
+            rm -f "$_tmp"; return 1
+        fi
+        if ! grep -q "GITHUB_REPO=\"SamNet-dev/MTProxyMax\"" "$_tmp" 2>/dev/null; then
+            log_error "Downloaded file doesn't look like MTProxyMax — aborting"
+            rm -f "$_tmp"; return 1
+        fi
+        local _dl_size
+        _dl_size=$(wc -c < "$_tmp")
+        if [ "$_dl_size" -lt 10000 ]; then
+            log_error "Downloaded file too small (${_dl_size} bytes) — possible truncated download"
+            rm -f "$_tmp"; return 1
+        fi
+
+        local _new_ver
+        _new_ver=$(grep -m1 '^VERSION="' "$_tmp" | cut -d'"' -f2)
+
+        # Compare SHA256 — if identical, already up to date
+        local _local_hash _remote_hash
+        _local_hash=$(sha256sum "${INSTALL_DIR}/mtproxymax" 2>/dev/null | cut -d' ' -f1)
+        _remote_hash=$(sha256sum "$_tmp" | cut -d' ' -f1)
+
+        if [ "$_local_hash" = "$_remote_hash" ]; then
+            log_success "Script is already up to date (v${_new_ver:-${VERSION}})"
+            rm -f "$_tmp" "$_UPDATE_BADGE"
+        else
+            log_info "Update found: v${_new_ver:-?} (installed: v${VERSION})"
+            echo -en "  ${BOLD}Update now? [y/N]:${NC} "
+            local _confirm; read -r _confirm
+            if [ "$_confirm" != "y" ] && [ "$_confirm" != "Y" ]; then
+                log_info "Skipped"
+                rm -f "$_tmp"
+            else
+                mkdir -p "$BACKUP_DIR"
+                cp "${INSTALL_DIR}/mtproxymax" \
+                   "${BACKUP_DIR}/mtproxymax.v${VERSION}.$(date +%s)" 2>/dev/null || true
+                chmod +x "$_tmp"
+                mv "$_tmp" "${INSTALL_DIR}/mtproxymax"
+                log_success "Script updated to v${_new_ver:-?}"
+                _script_updated=true
+                rm -f "$_UPDATE_BADGE"
+
+                # Save new commit SHA as baseline
+                local _new_sha
+                _new_sha=$(curl -fsSL --connect-timeout 5 --max-time 10 \
+                    "https://api.github.com/repos/${GITHUB_REPO}/commits/main" \
+                    -H "Accept: application/vnd.github.sha" 2>/dev/null) || true
+                if [ -n "$_new_sha" ] && [ ${#_new_sha} -ge 40 ]; then
+                    _new_sha="${_new_sha:0:40}"
+                    case "$_new_sha" in
+                        *[!a-f0-9]*) : ;;
+                        *) echo "$_new_sha" > "$_UPDATE_SHA_FILE" 2>/dev/null || true ;;
+                    esac
+                fi
+            fi
+        fi
+    else
+        log_error "Download failed — check your internet connection"
+        rm -f "$_tmp"
+        return 1
+    fi
+
+    # Regenerate + restart Telegram bot service if script was updated
+    if [ "$_script_updated" = true ] && [ "${TELEGRAM_ENABLED:-}" = "true" ]; then
+        log_info "Regenerating Telegram bot service..."
+        telegram_generate_service_script
+        if command -v systemctl &>/dev/null; then
+            systemctl restart mtproxymax-telegram.service 2>/dev/null \
+                && log_success "Telegram bot service restarted" \
+                || log_warn "Telegram restart failed — run: systemctl restart mtproxymax-telegram.service"
+        fi
+    fi
+
+    # Telemt engine update — pull image matching the script's pinned version
+    echo ""
+    local _expected_ver="${TELEMT_MIN_VERSION}-${TELEMT_COMMIT}"
+    local _current_ver
+    _current_ver=$(get_telemt_version)
+    if [ "$_current_ver" = "$_expected_ver" ]; then
+        log_success "Telemt engine is up to date (v${_current_ver})"
+    elif _version_gte "$_current_ver" "$_expected_ver"; then
+        log_success "Telemt engine is up to date (v${_current_ver})"
+    else
+        log_info "Engine update: v${_current_ver} -> v${_expected_ver}"
+        build_telemt_image true
+        if is_proxy_running; then
+            load_secrets
+            restart_proxy_container
+        fi
+    fi
+}
+
+# ── Section 14: Telegram Integration ────────────────────────
+
+telegram_send_message() {
+    local msg
+    msg=$(printf '%b' "$1")   # expand literal \n to real newlines
+    local token="${TELEGRAM_BOT_TOKEN}"
+    local chat_id="${TELEGRAM_CHAT_ID}"
+
+    { [ -z "$token" ] || [ -z "$chat_id" ]; } && return 1
+
+    local label="${TELEGRAM_SERVER_LABEL:-MTProxyMax}"
+    local ip
+    ip=$(get_public_ip)
+    local header
+    if [ -n "$ip" ]; then
+        header="[$(escape_md "$label") | ${ip}]"
+    else
+        header="[$(escape_md "$label")]"
+    fi
+
+    local full_msg="${header} ${msg}"
+
+    # Security: use curl config file to avoid token in process list
+    local _cfg
+    _cfg=$(_mktemp) || return 1
+    printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$token" > "$_cfg"
+
+    local response
+    response=$(curl -s --max-time 10 --max-filesize 1048576 -X POST \
+        -K "$_cfg" \
+        --data-urlencode "chat_id=${chat_id}" \
+        --data-urlencode "text=${full_msg}" \
+        --data-urlencode "parse_mode=Markdown" \
+        2>/dev/null)
+    local rc=$?
+    rm -f "$_cfg"
+    [ $rc -ne 0 ] && return 1
+    echo "$response" | grep -q '"ok":true' && return 0
+    return 1
+}
+
+telegram_send_photo() {
+    local photo_url="$1" caption="${2:-}"
+    local token="${TELEGRAM_BOT_TOKEN}"
+    local chat_id="${TELEGRAM_CHAT_ID}"
+    { [ -z "$token" ] || [ -z "$chat_id" ]; } && return 1
+
+    local label="${TELEGRAM_SERVER_LABEL:-MTProxyMax}"
+    [ -n "$caption" ] && caption="[${label}] ${caption}"
+
+    local _cfg
+    _cfg=$(_mktemp) || return 1
+    printf 'url = "https://api.telegram.org/bot%s/sendPhoto"\n' "$token" > "$_cfg"
+
+    curl -s --max-time 15 --max-filesize 10485760 -X POST \
+        -K "$_cfg" \
+        --data-urlencode "chat_id=${chat_id}" \
+        --data-urlencode "photo=${photo_url}" \
+        --data-urlencode "caption=${caption}" \
+        --data-urlencode "parse_mode=Markdown" \
+        >/dev/null 2>&1
+    local rc=$?
+    rm -f "$_cfg"
+    return $rc
+}
+
+telegram_get_chat_id() {
+    local token="${TELEGRAM_BOT_TOKEN}"
+    [ -z "$token" ] && return 1
+
+    # Security: use curl config file to avoid token in process list
+    local _cfg
+    _cfg=$(_mktemp) || return 1
+    printf 'url = "https://api.telegram.org/bot%s/getUpdates"\n' "$token" > "$_cfg"
+    local response
+    response=$(curl -s --max-time 10 -K "$_cfg" 2>/dev/null)
+    rm -f "$_cfg"
+
+    local chat_id
+    # Try Python first
+    if command -v python3 &>/dev/null; then
+        chat_id=$(echo "$response" | python3 -c "
+import json,sys
+try:
+    data=json.load(sys.stdin)
+    for r in reversed(data.get('result',[])):
+        msg=r.get('message',r.get('my_chat_member',{}))
+        if 'chat' in msg:
+            print(msg['chat']['id'])
+            break
+except: pass
+" 2>/dev/null)
+    fi
+
+    # Fallback: grep
+    if [ -z "$chat_id" ]; then
+        chat_id=$(echo "$response" | grep -oE '"chat"\s*:\s*\{[^}]*"id"\s*:\s*(-?[0-9]+)' | head -1 | grep -oE '-?[0-9]+$')
+    fi
+
+    if [ -n "$chat_id" ]; then
+        TELEGRAM_CHAT_ID="$chat_id"
+        return 0
+    fi
+    return 1
+}
+
+telegram_test_message() {
+    local msg="🔧 *MTProxyMax Test*\n\n${SYM_CHECK} Bot is connected and working!\n\n_Sent from MTProxyMax v${VERSION}_"
+    if telegram_send_message "$msg"; then
+        log_success "Test message sent"
+    else
+        log_error "Failed to send test message"
+    fi
+}
+
+telegram_notify_proxy_started() {
+    [ "$TELEGRAM_ENABLED" != "true" ] && return 0
+    { [ -z "$TELEGRAM_BOT_TOKEN" ] || [ -z "$TELEGRAM_CHAT_ID" ]; } && return 0
+
+    local server_ip
+    server_ip=$(get_public_ip)
+    [ -z "$server_ip" ] && return 1
+
+    # Build message with all enabled secrets and clickable connect links
+    local msg="📱 *MTProxy Started*\n\n"
+    local i _first_secret=""
+    for i in "${!SECRETS_LABELS[@]}"; do
+        [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+        local full_secret
+        full_secret=$(build_faketls_secret "${SECRETS_KEYS[$i]}")
+        [ -z "$_first_secret" ] && _first_secret="$full_secret"
+        msg+="🏷 *${SECRETS_LABELS[$i]}*\n"
+        msg+="🔗 [Connect](https://t.me/proxy?server=${server_ip}&port=${PROXY_PORT}&secret=${full_secret})\n"
+        msg+="📡 \`${server_ip}:${PROXY_PORT}\` | 🔑 \`${full_secret}\`\n\n"
+    done
+
+    msg+="📊 Domain: ${PROXY_DOMAIN}\n"
+    msg+="_Tap the link above or scan QR code to connect._"
+
+    telegram_send_message "$msg"
+
+    # Send QR for first enabled secret
+    if [ -n "$_first_secret" ]; then
+        local qr_url
+        qr_url=$(generate_qr_url "https://t.me/proxy?server=${server_ip}&port=${PROXY_PORT}&secret=${_first_secret}")
+        telegram_send_photo "$qr_url" "📱 *MTProxy QR Code* — Scan in Telegram to connect"
+    fi
+}
+
+telegram_setup_wizard() {
+    clear_screen
+    draw_header "TELEGRAM BOT SETUP"
+
+    echo ""
+    echo -e "  ${BOLD}Шаг 1: Создайте бота${NC}"
+    echo -e "  ${DIM}1. Откройте Telegram и найдите @BotFather${NC}"
+    echo -e "  ${DIM}2. Отправьте /newbot и следуйте инструкциям${NC}"
+    echo -e "  ${DIM}3. Скопируйте токен бота${NC}"
+    echo ""
+
+    echo -en "  ${BOLD}Paste your bot token:${NC} "
+    local token
+    read -r token
+
+    # Validate token format
+    if ! [[ "$token" =~ ^[0-9]+:[A-Za-z0-9_-]+$ ]]; then
+        log_error "Invalid token format"
+        return 1
+    fi
+
+    # Test token via getMe (use config file to hide token from process list)
+    local _cfg
+    _cfg=$(_mktemp) || return 1
+    printf 'url = "https://api.telegram.org/bot%s/getMe"\n' "$token" > "$_cfg"
+    local response
+    response=$(curl -s --max-time 10 -K "$_cfg" 2>/dev/null)
+    rm -f "$_cfg"
+    if ! echo "$response" | grep -q '"ok":true'; then
+        log_error "Invalid token — bot not found"
+        return 1
+    fi
+
+    local bot_name
+    bot_name=$(echo "$response" | grep -oE '"username"\s*:\s*"[^"]*"' | head -1 | cut -d'"' -f4)
+    log_success "Bot found: @${bot_name}"
+
+    TELEGRAM_BOT_TOKEN="$token"
+
+    echo ""
+    echo -e "  ${BOLD}Шаг 2: Получите ваш Chat ID${NC}"
+    echo -e "  ${DIM}Отправьте /start вашему боту (@${bot_name}) в Telegram, затем нажмите Введите здесь.${NC}"
+    echo ""
+    echo -en "  ${DIM}Press Введите when you've sent /start...${NC}"
+    read -r
+
+    sleep 2
+
+    if telegram_get_chat_id; then
+        log_success "Chat ID detected: ${TELEGRAM_CHAT_ID}"
+    else
+        echo ""
+        echo -e "  ${YELLOW}Не удалось автоматически определить Chat ID.${NC}"
+        echo -en "  ${BOLD}Введите Chat ID manually:${NC} "
+        local manual_id
+        read -r manual_id
+        if [[ "$manual_id" =~ ^-?[0-9]+$ ]]; then
+            TELEGRAM_CHAT_ID="$manual_id"
+        else
+            log_error "Invalid Chat ID"
+            return 1
+        fi
+    fi
+
+    echo ""
+    echo -e "  ${BOLD}Шаг 3: Интервал уведомлений${NC}"
+    echo -en "  ${DIM}Send status reports every N hours [6]:${NC} "
+    local interval
+    read -r interval
+    [[ "$interval" =~ ^[0-9]+$ ]] && [ "$interval" -gt 0 ] && TELEGRAM_INTERVAL="$interval"
+
+    echo ""
+    echo -e "  ${BOLD}Шаг 4: Метка сервера${NC}"
+    echo -en "  ${DIM}Label for this server [MTProxyMax]:${NC} "
+    local label
+    read -r label
+    if [ -n "$label" ]; then
+        if [[ "$label" =~ ^[a-zA-Z0-9_.\ -]+$ ]] && [ ${#label} -le 32 ]; then
+            TELEGRAM_SERVER_LABEL="$label"
+        else
+            log_warn "Invalid label (letters, digits, spaces, dots, hyphens, max 32 chars). Using default."
+        fi
+    fi
+
+    TELEGRAM_ENABLED="true"
+    TELEGRAM_ALERTS_ENABLED="true"
+    save_settings
+
+    echo ""
+    log_success "Telegram bot configured!"
+
+    # Send test message
+    telegram_test_message
+
+    # Send proxy links
+    telegram_notify_proxy_started &>/dev/null &
+
+    # Setup systemd service for bot polling
+    setup_telegram_service
+
+    press_any_key
+}
+
+telegram_generate_service_script() {
+    local script_path="${INSTALL_DIR}/mtproxymax-telegram.sh"
+
+    cat > "$script_path" << 'TELEGRAM_SCRIPT'
+#!/bin/bash
+# MTProxyMax Telegram Bot Service
+# Auto-generated — do not edit manually
+
+INSTALL_DIR="/opt/mtproxymax"
+SETTINGS_FILE="${INSTALL_DIR}/settings.conf"
+SECRETS_FILE="${INSTALL_DIR}/secrets.conf"
+OFFSET_FILE="${INSTALL_DIR}/relay_stats/tg_offset"
+PID_FILE="${INSTALL_DIR}/mtproxymax-telegram.pid"
+
+# Source the main script functions
+SCRIPT_PATH="${INSTALL_DIR}/mtproxymax"
+
+# Load settings (inline minimal version)
+load_tg_settings() {
+    [ -f "$SETTINGS_FILE" ] || return
+    while IFS= read -r line; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ "$line" =~ ^[[:space:]]*$ ]] && continue
+        if [[ "$line" =~ ^([A-Z_][A-Z0-9_]*)=\'([^\']*)\'$ ]]; then
+            local key="${BASH_REMATCH[1]}" val="${BASH_REMATCH[2]}"
+            case "$key" in
+                PROXY_PORT|PROXY_DOMAIN|PROXY_METRICS_PORT|PROXY_CONCURRENCY|\
+                PROXY_CPUS|PROXY_MEMORY|CUSTOM_IP|PROXY_PROTOCOL|PROXY_PROTOCOL_TRUSTED_CIDRS|MASKING_ENABLED|MASKING_HOST|MASKING_PORT|\
+                AD_TAG|GEOBLOCK_MODE|BLOCKLIST_COUNTRIES|AUTO_UPDATE_ENABLED|\
+                TELEGRAM_ENABLED|TELEGRAM_BOT_TOKEN|TELEGRAM_CHAT_ID|\
+                TELEGRAM_INTERVAL|TELEGRAM_SERVER_LABEL|TELEGRAM_ALERTS_ENABLED)
+                    printf -v "$key" '%s' "$val" ;;
+            esac
+        fi
+    done < "$SETTINGS_FILE"
+}
+
+# IP cache (refreshed every 5 minutes)
+_TG_IP_CACHE=""
+_TG_IP_CACHE_AGE=0
+get_cached_ip() {
+    # Return custom IP if configured
+    if [ -n "${CUSTOM_IP}" ]; then
+        echo "${CUSTOM_IP}"; return 0
+    fi
+    local now; now=$(date +%s)
+    if [ -n "$_TG_IP_CACHE" ] && [ $(( now - _TG_IP_CACHE_AGE )) -lt 300 ]; then
+        echo "$_TG_IP_CACHE"; return 0
+    fi
+    local ip
+    ip=$(curl -s --max-time 3 https://api.ipify.org 2>/dev/null || echo "")
+    if [ -n "$ip" ]; then
+        _TG_IP_CACHE="$ip"
+        _TG_IP_CACHE_AGE=$now
+    fi
+    echo "$ip"
+}
+
+# Minimal Telegram send
+tg_send() {
+    local msg
+    msg=$(printf '%b' "$1")   # expand literal \n to real newlines
+    local label="${TELEGRAM_SERVER_LABEL:-MTProxyMax}"
+    local _ip; _ip=$(get_cached_ip)
+    [ -n "$_ip" ] && msg="[$(_esc "$label") | ${_ip}] ${msg}" || msg="[$(_esc "$label")] ${msg}"
+    local _cfg=$(mktemp /tmp/.mtproxymax-tg.XXXXXX)
+    chmod 600 "$_cfg"
+    printf 'url = "https://api.telegram.org/bot%s/sendMessage"\n' "$TELEGRAM_BOT_TOKEN" > "$_cfg"
+    curl -s --max-time 10 -X POST -K "$_cfg" \
+        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+        --data-urlencode "text=${msg}" \
+        --data-urlencode "parse_mode=Markdown" >/dev/null 2>&1
+    rm -f "$_cfg"
+}
+
+tg_send_photo() {
+    local photo="$1" caption="${2:-}"
+    local _cfg=$(mktemp /tmp/.mtproxymax-tg.XXXXXX)
+    chmod 600 "$_cfg"
+    printf 'url = "https://api.telegram.org/bot%s/sendPhoto"\n' "$TELEGRAM_BOT_TOKEN" > "$_cfg"
+    curl -s --max-time 15 -X POST -K "$_cfg" \
+        --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+        --data-urlencode "photo=${photo}" \
+        --data-urlencode "caption=[$(_esc "${TELEGRAM_SERVER_LABEL:-MTProxyMax}")] ${caption}" \
+        --data-urlencode "parse_mode=Markdown" >/dev/null 2>&1
+    rm -f "$_cfg"
+}
+
+# Send QR code image for a proxy secret (no text URL — avoids Telegram bot bans)
+send_proxy_qr() {
+    local ip="$1" port="$2" secret="$3" caption="${4:-Scan in Telegram to connect}"
+    local hl="https://t.me/proxy?server=${ip}&port=${port}&secret=${secret}"
+    local el=$(printf '%s' "$hl" | sed 's/&/%26/g;s/?/%3F/g;s/=/%3D/g;s/:/%3A/g;s|/|%2F|g')
+    tg_send_photo "https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${el}" "$caption"
+}
+
+# Escape Markdown special chars in labels for Telegram
+_esc() { local t="$1"; t="${t//_/\\_}"; t="${t//\*/\\*}"; t="${t//\`/\\\`}"; echo "$t"; }
+
+format_bytes() {
+    local b=$1; [[ "$b" =~ ^[0-9]+$ ]] || b=0
+    [ "$b" -lt 1024 ] 2>/dev/null && echo "${b} B" && return
+    [ "$b" -lt 1048576 ] 2>/dev/null && echo "$(awk -v b=$b 'BEGIN{printf "%.1f",b/1024}') KB" && return
+    [ "$b" -lt 1073741824 ] 2>/dev/null && echo "$(awk -v b=$b 'BEGIN{printf "%.2f",b/1048576}') MB" && return
+    echo "$(awk -v b=$b 'BEGIN{printf "%.2f",b/1073741824}') GB"
+}
+
+format_duration() {
+    local s=$1; [[ "$s" =~ ^[0-9]+$ ]] || s=0
+    local d=$((s/86400)) h=$(((s%86400)/3600)) m=$(((s%3600)/60))
+    [ "$d" -gt 0 ] && echo "${d}d ${h}h ${m}m" && return
+    [ "$h" -gt 0 ] && echo "${h}h ${m}m" && return
+    echo "${m}m"
+}
+
+is_running() {
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^mtproxymax$"
+}
+
+get_stats() {
+    local m=$(curl -s --max-time 2 "http://127.0.0.1:${PROXY_METRICS_PORT:-9090}/metrics" 2>/dev/null)
+    [ -z "$m" ] && echo "0 0 0" && return
+    local i=$(echo "$m"|awk '/^telemt_user_octets_from_client\{/{s+=$NF}END{printf "%.0f",s}')
+    local o=$(echo "$m"|awk '/^telemt_user_octets_to_client\{/{s+=$NF}END{printf "%.0f",s}')
+    local c=$(echo "$m"|awk '/^telemt_user_connections_current\{/{s+=$NF}END{printf "%.0f",s}')
+    echo "${i:-0} ${o:-0} ${c:-0}"
+}
+
+get_uptime() {
+    local sa=$(docker inspect --format '{{.State.StartedAt}}' mtproxymax 2>/dev/null)
+    [ -z "$sa" ] && echo 0 && return
+    local sa_clean="${sa%%.*}"
+    [[ "$sa" == *Z ]] && sa_clean="${sa_clean}Z"
+    local se
+    se=$(date -d "$sa_clean" +%s 2>/dev/null) && [ "$se" -gt 0 ] 2>/dev/null || {
+        local sa_bb="${sa_clean%Z}"
+        se=$(date -D '%Y-%m-%dT%H:%M:%S' -d "$sa_bb" +%s 2>/dev/null) || se=0
+    }
+    echo $(( $(date +%s) - se ))
+}
+
+get_user_stats_tg() {
+    local user="$1" m="${2:-}"
+    [ -z "$m" ] && m=$(curl -s --max-time 2 "http://127.0.0.1:${PROXY_METRICS_PORT:-9090}/metrics" 2>/dev/null)
+    [ -z "$m" ] && echo "0 0 0" && return
+    local i=$(echo "$m"|awk -v u="$user" '$0 ~ "^telemt_user_octets_from_client\\{.*user=\"" u "\"" {print $NF}')
+    local o=$(echo "$m"|awk -v u="$user" '$0 ~ "^telemt_user_octets_to_client\\{.*user=\"" u "\"" {print $NF}')
+    local c=$(echo "$m"|awk -v u="$user" '$0 ~ "^telemt_user_connections_current\\{.*user=\"" u "\"" {print $NF}')
+    echo "${i:-0} ${o:-0} ${c:-0}"
+}
+
+domain_to_hex() { printf '%s' "$1" | od -An -tx1 | tr -d ' \n'; }
+
+# ── Traffic Delta Tracking (matches torware pattern) ────────
+TRAFFIC_FILE="${INSTALL_DIR}/relay_stats/cumulative_traffic"
+USER_TRAFFIC_FILE="${INSTALL_DIR}/relay_stats/user_traffic"
+_prev_total_in=0
+_prev_total_out=0
+_cum_in=0
+_cum_out=0
+declare -A _prev_user_in _prev_user_out _cum_user_in _cum_user_out
+
+load_traffic() {
+    if [ -f "$TRAFFIC_FILE" ]; then
+        IFS='|' read -r _cum_in _cum_out < "$TRAFFIC_FILE"
+    fi
+    _cum_in=${_cum_in:-0}; _cum_out=${_cum_out:-0}
+    [[ "$_cum_in" =~ ^[0-9]+$ ]] || _cum_in=0
+    [[ "$_cum_out" =~ ^[0-9]+$ ]] || _cum_out=0
+    if [ -f "$USER_TRAFFIC_FILE" ]; then
+        while IFS='|' read -r _ul _ui _uo; do
+            [[ "$_ul" =~ ^# ]] && continue; [ -z "$_ul" ] && continue
+            [[ "$_ul" =~ ^[a-zA-Z0-9_-]+$ ]] || continue
+            local _vi=${_ui:-0} _vo=${_uo:-0}
+            [[ "$_vi" =~ ^[0-9]+$ ]] || _vi=0
+            [[ "$_vo" =~ ^[0-9]+$ ]] || _vo=0
+            _cum_user_in["$_ul"]=$_vi
+            _cum_user_out["$_ul"]=$_vo
+        done < "$USER_TRAFFIC_FILE"
+    fi
+}
+
+save_traffic() {
+    local _tdir="${INSTALL_DIR}/relay_stats"
+    mkdir -p "$_tdir" 2>/dev/null
+    # Acquire lock to prevent race with flush_traffic_to_disk
+    exec 9>"${_tdir}/.traffic.lock"
+    flock -w 5 9 2>/dev/null || return
+    local _tmp=$(mktemp "${_tdir}/.traffic.XXXXXX" 2>/dev/null) || { exec 9>&-; return; }
+    chmod 600 "$_tmp"
+    echo "${_cum_in}|${_cum_out}" > "$_tmp"
+    mv "$_tmp" "$TRAFFIC_FILE" 2>/dev/null || { rm -f "$_tmp"; exec 9>&-; return; }
+    _tmp=$(mktemp "${_tdir}/.traffic.XXXXXX" 2>/dev/null) || { exec 9>&-; return; }
+    chmod 600 "$_tmp"
+    for _ul in "${!_cum_user_in[@]}"; do
+        echo "${_ul}|${_cum_user_in[$_ul]}|${_cum_user_out[$_ul]}" >> "$_tmp"
+    done
+    mv "$_tmp" "$USER_TRAFFIC_FILE" 2>/dev/null || rm -f "$_tmp"
+    # Save raw Prometheus snapshot so secret list can compute deltas
+    _tmp=$(mktemp "${_tdir}/.traffic.XXXXXX" 2>/dev/null) || { exec 9>&-; return; }
+    chmod 600 "$_tmp"
+    for _ul in "${!_prev_user_in[@]}"; do
+        echo "${_ul}|${_prev_user_in[$_ul]:-0}|${_prev_user_out[$_ul]:-0}" >> "$_tmp"
+    done
+    mv "$_tmp" "${_tdir}/user_traffic_snapshot" 2>/dev/null || rm -f "$_tmp"
+    # Save global Prometheus snapshot
+    _tmp=$(mktemp "${_tdir}/.traffic.XXXXXX" 2>/dev/null) || { exec 9>&-; return; }
+    chmod 600 "$_tmp"
+    echo "${_prev_total_in}|${_prev_total_out}" > "$_tmp"
+    mv "$_tmp" "${_tdir}/global_traffic_snapshot" 2>/dev/null || rm -f "$_tmp"
+    exec 9>&-  # Release lock
+}
+
+update_traffic() {
+    # Fetch metrics once for both global and per-user stats
+    local _metrics
+    _metrics=$(curl -s --max-time 2 "http://127.0.0.1:${PROXY_METRICS_PORT:-9090}/metrics" 2>/dev/null)
+    local cur_in cur_out
+    if [ -n "$_metrics" ]; then
+        cur_in=$(echo "$_metrics"|awk '/^telemt_user_octets_from_client\{/{s+=$NF}END{printf "%.0f",s}')
+        cur_out=$(echo "$_metrics"|awk '/^telemt_user_octets_to_client\{/{s+=$NF}END{printf "%.0f",s}')
+    fi
+    cur_in=${cur_in:-0}; cur_out=${cur_out:-0}
+
+    # Compute deltas (torware pattern: detect container restart by negative delta)
+    local delta_in=$((cur_in - _prev_total_in))
+    local delta_out=$((cur_out - _prev_total_out))
+    [ "$delta_in" -lt 0 ] 2>/dev/null && delta_in=$cur_in
+    [ "$delta_out" -lt 0 ] 2>/dev/null && delta_out=$cur_out
+    _cum_in=$((_cum_in + delta_in))
+    _cum_out=$((_cum_out + delta_out))
+    _prev_total_in=$cur_in
+    _prev_total_out=$cur_out
+
+    # Per-user delta tracking (reuse already-fetched metrics)
+    while IFS='|' read -r label secret created enabled _mc _mi _q _ex _notes; do
+        [[ "$label" =~ ^# ]] && continue; [ -z "$secret" ] && continue
+        [ "$enabled" != "true" ] && continue
+        local ui=0 uo=0 _uc=0
+        read -r ui uo _uc <<< "$(get_user_stats_tg "$label" "$_metrics")"
+        local prev_ui=${_prev_user_in["$label"]:-0}
+        local prev_uo=${_prev_user_out["$label"]:-0}
+        local du=$((ui - prev_ui))
+        local dou=$((uo - prev_uo))
+        [ "$du" -lt 0 ] 2>/dev/null && du=$ui
+        [ "$dou" -lt 0 ] 2>/dev/null && dou=$uo
+        _cum_user_in["$label"]=$(( ${_cum_user_in["$label"]:-0} + du ))
+        _cum_user_out["$label"]=$(( ${_cum_user_out["$label"]:-0} + dou ))
+        _prev_user_in["$label"]=$ui
+        _prev_user_out["$label"]=$uo
+    done < "$SECRETS_FILE"
+
+    save_traffic
+}
+
+get_cum_traffic() { echo "${_cum_in:-0} ${_cum_out:-0}"; }
+get_cum_user_traffic() { echo "${_cum_user_in[$1]:-0} ${_cum_user_out[$1]:-0}"; }
+
+process_commands() {
+    local offset=$(cat "$OFFSET_FILE" 2>/dev/null || echo "0")
+    [[ "$offset" =~ ^[0-9]+$ ]] || offset="0"
+    local _cfg=$(mktemp /tmp/.mtproxymax-tg.XXXXXX)
+    chmod 600 "$_cfg"
+    printf 'url = "https://api.telegram.org/bot%s/getUpdates?offset=%s&timeout=1"\n' "$TELEGRAM_BOT_TOKEN" "$offset" > "$_cfg"
+    local updates
+    updates=$(curl -s --max-time 15 -K "$_cfg" 2>/dev/null)
+    rm -f "$_cfg"
+    [ -z "$updates" ] && return
+
+    if command -v python3 &>/dev/null; then
+        echo "$updates" | python3 -c "
+import json,sys
+try:
+    data=json.load(sys.stdin)
+    for r in data.get('result',[]):
+        uid=r['update_id']
+        txt=r.get('message',{}).get('text','').split('\n')[0][:200]
+        cid=r.get('message',{}).get('chat',{}).get('id','')
+        print(f'{uid}\t{cid}\t{txt}')
+except: pass
+" 2>/dev/null | while IFS=$'\t' read -r _uid _cid _txt; do
+            [ -z "$_uid" ] && continue
+            _process_cmd "$_uid" "$_cid" "$_txt"
+        done
+    else
+        # Fallback: grep-based parsing (no python)
+        local _new_offset
+        _new_offset=$(echo "$updates" | grep -oE '"update_id"\s*:\s*[0-9]+' | tail -1 | grep -oE '[0-9]+')
+        if [ -n "$_new_offset" ]; then
+            echo "$((_new_offset + 1))" > "$OFFSET_FILE"
+        fi
+        local _text _cid
+        _text=$(echo "$updates" | grep -oE '"text"\s*:\s*"[^"]*"' | tail -1 | sed 's/.*"text"\s*:\s*"//;s/"$//')
+        _cid=$(echo "$updates" | grep -oE '"chat"\s*:\s*\{[^}]*"id"\s*:\s*-?[0-9]+' | tail -1 | grep -oE '-?[0-9]+$')
+        [ -n "$_text" ] && [ -n "$_cid" ] && [ "$_cid" = "$TELEGRAM_CHAT_ID" ] && {
+            _new_offset=${_new_offset:-0}
+            _process_cmd "$_new_offset" "$_cid" "$_text"
+        }
+    fi
+}
+
+_process_cmd() {
+    local update_id="$1" chat_id="$2" text="$3"
+    echo "$((update_id + 1))" > "$OFFSET_FILE"
+
+    # Only respond to our chat
+    [ "$chat_id" != "$TELEGRAM_CHAT_ID" ] && return
+
+    case "$text" in
+        /mp_status|/mp_status@*)
+            load_tg_settings
+            if ! is_running; then
+                tg_send "📱 *MTProxy Status*\n\n🔴 Status: Stopped"
+                return
+            fi
+            local stats=$(get_stats)
+            local conns=$(echo "$stats"|awk '{print $3}')
+            local up=$(get_uptime)
+            local cum=$(get_cum_traffic)
+            local ct_in=$(echo "$cum"|awk '{print $1}')
+            local ct_out=$(echo "$cum"|awk '{print $2}')
+            tg_send "📱 *MTProxy Status*\n\n🟢 Status: Running\n⏱ Uptime: $(format_duration $up)\n👥 Connections: ${conns}\n📊 Traffic: ↓ $(format_bytes $ct_in) ↑ $(format_bytes $ct_out)\n🔗 Port: ${PROXY_PORT} | Domain: ${PROXY_DOMAIN}"
+            ;;
+        /mp_secrets|/mp_secrets@*)
+            load_tg_settings
+            [ ! -f "$SECRETS_FILE" ] && tg_send "📋 No secrets configured." && return
+            local msg="📋 *Secrets*\n\n"
+            local _sec_metrics
+            _sec_metrics=$(curl -s --max-time 2 "http://127.0.0.1:${PROXY_METRICS_PORT:-9090}/metrics" 2>/dev/null)
+            while IFS='|' read -r label secret created enabled _mc _mi _q _ex _notes; do
+                [[ "$label" =~ ^# ]] && continue
+                [ -z "$secret" ] && continue
+                local icon="🟢"; [ "$enabled" != "true" ] && icon="🔴"
+                local us=$(get_user_stats_tg "$label" "$_sec_metrics")
+                local uc=$(echo "$us"|awk '{print $3}')
+                local cum_u=$(get_cum_user_traffic "$label")
+                local cui=$(echo "$cum_u"|awk '{print $1}')
+                local cuo=$(echo "$cum_u"|awk '{print $2}')
+                msg+="${icon} *$(_esc "$label")* — ${uc} conn | ↓$(format_bytes $cui) ↑$(format_bytes $cuo)\n"
+            done < "$SECRETS_FILE"
+            tg_send "$msg"
+            ;;
+        /mp_link|/mp_link@*)
+            load_tg_settings
+            local ip; ip=$(get_cached_ip)
+            [ -z "$ip" ] && tg_send "❌ Cannot detect server IP" && return
+            local msg="🔗 *Proxy Details*\n\n"
+            local _first_fs=""
+            while IFS='|' read -r label secret created enabled _mc _mi _q _ex _notes; do
+                [[ "$label" =~ ^# ]] && continue
+                [ -z "$secret" ] && continue
+                [ "$enabled" != "true" ] && continue
+                local dh=$(domain_to_hex "${PROXY_DOMAIN:-cloudflare.com}")
+                local fs="ee${secret}${dh}"
+                [ -z "$_first_fs" ] && _first_fs="$fs"
+                msg+="🏷 *$(_esc "$label")*\n🔗 [Connect](https://t.me/proxy?server=${ip}&port=${PROXY_PORT}&secret=${fs})\n📡 \`${ip}:${PROXY_PORT}\` | 🔑 \`${fs}\`\n\n"
+            done < "$SECRETS_FILE"
+            tg_send "$msg"
+            # Send QR for first enabled secret
+            [ -n "$_first_fs" ] && send_proxy_qr "$ip" "$PROXY_PORT" "$_first_fs"
+            ;;
+        /mp_add\ *|/mp_add@*\ *)
+            local label=$(echo "$text" | awk '{print $2}')
+            [ -z "$label" ] && tg_send "❌ Usage: /mp\\_add <label>" && return
+            [[ "$label" =~ ^[a-zA-Z0-9_-]+$ ]] || { tg_send "❌ Invalid label (use a-z, 0-9, \\_, -)"; return; }
+            "${INSTALL_DIR}/mtproxymax" secret add "$label" &>/dev/null
+            if [ $? -eq 0 ]; then
+                load_tg_settings
+                local ip; ip=$(get_cached_ip)
+                local ns=$(grep "^${label}|" "$SECRETS_FILE" 2>/dev/null | head -1 | cut -d'|' -f2)
+                local dh=$(domain_to_hex "${PROXY_DOMAIN:-cloudflare.com}")
+                local fs="ee${ns}${dh}"
+                tg_send "✅ Secret *$(_esc "$label")* created!\n\n🔗 [Connect](https://t.me/proxy?server=${ip}&port=${PROXY_PORT}&secret=${fs})\n📡 \`${ip}:${PROXY_PORT}\` | 🔑 \`${fs}\`"
+                send_proxy_qr "$ip" "$PROXY_PORT" "$fs"
+            else
+                tg_send "❌ Failed to add secret '$(_esc "$label")' (may already exist)"
+            fi
+            ;;
+        /mp_remove\ *|/mp_remove@*\ *)
+            local label=$(echo "$text" | awk '{print $2}')
+            [ -z "$label" ] && tg_send "❌ Usage: /mp\\_remove <label>" && return
+            [[ "$label" =~ ^[a-zA-Z0-9_-]+$ ]] || { tg_send "❌ Invalid label"; return; }
+            if ! grep -q "^${label}|" "$SECRETS_FILE" 2>/dev/null; then
+                tg_send "❌ Secret '$(_esc "$label")' not found"
+                return
+            fi
+            local _scount
+            _scount=$(grep -v '^#' "$SECRETS_FILE" 2>/dev/null | grep -c '|' || echo 0)
+            if [ "${_scount:-0}" -le 1 ]; then
+                tg_send "❌ Cannot remove the last secret"
+                return
+            fi
+            "${INSTALL_DIR}/mtproxymax" secret remove "$label" &>/dev/null
+            if [ $? -eq 0 ]; then
+                tg_send "✅ Secret *$(_esc "$label")* removed"
+            else
+                tg_send "❌ Failed to remove secret '$(_esc "$label")'"
+            fi
+            ;;
+        /mp_rotate\ *|/mp_rotate@*\ *)
+            local label=$(echo "$text" | awk '{print $2}')
+            [ -z "$label" ] && tg_send "❌ Usage: /mp\\_rotate <label>" && return
+            [[ "$label" =~ ^[a-zA-Z0-9_-]+$ ]] || { tg_send "❌ Invalid label"; return; }
+            "${INSTALL_DIR}/mtproxymax" secret rotate "$label" &>/dev/null
+            if [ $? -eq 0 ]; then
+                load_tg_settings
+                local ip; ip=$(get_cached_ip)
+                # Re-read the new secret from file
+                local ns=$(grep "^${label}|" "$SECRETS_FILE" 2>/dev/null | head -1 | cut -d'|' -f2)
+                local dh=$(domain_to_hex "${PROXY_DOMAIN:-cloudflare.com}")
+                local fs="ee${ns}${dh}"
+                tg_send "🔄 Secret *$(_esc "$label")* rotated!\n\n🔗 [Connect](https://t.me/proxy?server=${ip}&port=${PROXY_PORT}&secret=${fs})\n📡 \`${ip}:${PROXY_PORT}\` | 🔑 \`${fs}\`"
+                send_proxy_qr "$ip" "$PROXY_PORT" "$fs"
+            else
+                tg_send "❌ Secret '$(_esc "$label")' not found"
+            fi
+            ;;
+        /mp_restart|/mp_restart@*)
+            tg_send "🔄 Restarting proxy..."
+            "${INSTALL_DIR}/mtproxymax" restart &>/dev/null
+            sleep 3
+            if is_running; then
+                tg_send "✅ Proxy restarted successfully"
+            else
+                tg_send "❌ Proxy failed to restart"
+            fi
+            ;;
+        /mp_enable\ *|/mp_enable@*\ *)
+            local label=$(echo "$text" | awk '{print $2}')
+            [ -z "$label" ] && tg_send "❌ Usage: /mp\\_enable <label>" && return
+            [[ "$label" =~ ^[a-zA-Z0-9_-]+$ ]] || { tg_send "❌ Invalid label"; return; }
+            "${INSTALL_DIR}/mtproxymax" secret enable "$label" &>/dev/null
+            if [ $? -eq 0 ]; then
+                tg_send "✅ Secret *$(_esc "$label")* enabled"
+            else
+                tg_send "❌ Secret '$(_esc "$label")' not found"
+            fi
+            ;;
+        /mp_disable\ *|/mp_disable@*\ *)
+            local label=$(echo "$text" | awk '{print $2}')
+            [ -z "$label" ] && tg_send "❌ Usage: /mp\\_disable <label>" && return
+            [[ "$label" =~ ^[a-zA-Z0-9_-]+$ ]] || { tg_send "❌ Invalid label"; return; }
+            "${INSTALL_DIR}/mtproxymax" secret disable "$label" &>/dev/null
+            if [ $? -eq 0 ]; then
+                tg_send "✅ Secret *$(_esc "$label")* disabled"
+            else
+                tg_send "❌ Secret '$(_esc "$label")' not found"
+            fi
+            ;;
+        /mp_health|/mp_health@*)
+            local health_out
+            health_out=$("${INSTALL_DIR}/mtproxymax" health 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | head -20) || true
+            local status_icon="🟢"
+            echo "$health_out" | grep -qi "fail\|error\|down" && status_icon="🔴"
+            tg_send "${status_icon} *Health Check*\n\n\`\`\`\n${health_out}\n\`\`\`"
+            ;;
+        /mp_traffic|/mp_traffic@*)
+            load_tg_settings
+            local cum=$(get_cum_traffic)
+            local ct_in=$(echo "$cum"|awk '{print $1}')
+            local ct_out=$(echo "$cum"|awk '{print $2}')
+            local stats=$(get_stats)
+            local conns=$(echo "$stats"|awk '{print $3}')
+            local msg="📊 *Traffic Report*\n\n"
+            msg+="Total: ↓ $(format_bytes $ct_in) ↑ $(format_bytes $ct_out)\n"
+            msg+="Active connections: ${conns}\n\n"
+            while IFS='|' read -r label secret created enabled _mc _mi _q _ex _notes; do
+                [[ "$label" =~ ^# ]] && continue; [ -z "$secret" ] && continue
+                [ "$enabled" != "true" ] && continue
+                local cum_u=$(get_cum_user_traffic "$label")
+                local cui=$(echo "$cum_u"|awk '{print $1}')
+                local cuo=$(echo "$cum_u"|awk '{print $2}')
+                msg+="👤 *$(_esc "$label")*: ↓ $(format_bytes $cui) ↑ $(format_bytes $cuo)\n"
+            done < "$SECRETS_FILE"
+            tg_send "$msg"
+            ;;
+        /mp_update|/mp_update@*)
+            tg_send "🔍 Checking for updates..."
+            local update_out
+            update_out=$("${INSTALL_DIR}/mtproxymax" update </dev/null 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | tail -5)
+            if [ -n "$update_out" ]; then
+                tg_send "📋 Update check:\n\`\`\`\n${update_out}\n\`\`\`"
+            else
+                tg_send "✅ Script is up to date"
+            fi
+            ;;
+        /mp_limits|/mp_limits@*)
+            load_tg_settings
+            [ ! -f "$SECRETS_FILE" ] && tg_send "📋 No secrets configured." && return
+            local msg="📋 *User Limits*\n\n"
+            while IFS='|' read -r label secret created enabled max_conns max_ips quota expires _notes; do
+                [[ "$label" =~ ^# ]] && continue
+                [ -z "$secret" ] && continue
+                max_conns=${max_conns:-0}; max_ips=${max_ips:-0}; quota=${quota:-0}; expires=${expires:-0}
+                local conns_fmt="∞"; [ "$max_conns" != "0" ] && conns_fmt="$max_conns"
+                local ips_fmt="∞"; [ "$max_ips" != "0" ] && ips_fmt="$max_ips"
+                local quota_fmt="∞"; [ "$quota" != "0" ] && quota_fmt="$(format_bytes $quota)"
+                local exp_fmt="never"; [ "$expires" != "0" ] && exp_fmt="${expires%%T*}"
+                msg+="👤 *$(_esc "$label")*\n  Conns: ${conns_fmt} | IPs: ${ips_fmt} | Quota: ${quota_fmt} | Exp: ${exp_fmt}\n"
+            done < "$SECRETS_FILE"
+            tg_send "$msg"
+            ;;
+        /mp_setlimit\ *|/mp_setlimit@*\ *)
+            local args=$(echo "$text" | awk '{$1=""; print $0}' | xargs)
+            local sl_label=$(echo "$args" | awk '{print $1}')
+            local sl_conns=$(echo "$args" | awk '{print $2}')
+            local sl_ips=$(echo "$args" | awk '{print $3}')
+            local sl_quota=$(echo "$args" | awk '{print $4}')
+            local sl_exp=$(echo "$args" | awk '{print $5}')
+            [ -z "$sl_label" ] && tg_send "❌ Usage: /mp\\_setlimit <label> <conns> <ips> <quota> [expires]\nExample: /mp\\_setlimit alice 100 5 5G 2026-12-31" && return
+            [[ "$sl_label" =~ ^[a-zA-Z0-9_-]+$ ]] || { tg_send "❌ Invalid label"; return; }
+            if "${INSTALL_DIR}/mtproxymax" secret setlimits "$sl_label" "${sl_conns:-0}" "${sl_ips:-0}" "${sl_quota:-0}" "${sl_exp:-}" &>/dev/null; then
+                tg_send "✅ Limits updated for *$(_esc "$sl_label")*\nConns: ${sl_conns:-0} | IPs: ${sl_ips:-0} | Quota: ${sl_quota:-0}"
+            else
+                tg_send "❌ Failed to set limits for *$(_esc "$sl_label")* — check label exists"
+            fi
+            ;;
+        /mp_upstreams|/mp_upstreams@*)
+            load_tg_settings
+            local uf="${INSTALL_DIR}/upstreams.conf"
+            if [ ! -f "$uf" ]; then
+                tg_send "📋 *Upstreams*\n\n🟢 direct (weight: 10)"
+                return
+            fi
+            local msg="📋 *Upstreams*\n\n"
+            while IFS='|' read -r name type addr user pass weight iface enabled; do
+                [[ "$name" =~ ^# ]] && continue
+                [ -z "$name" ] && continue
+                # Backward compat: old 7-col has enabled in col7
+                if [ "$iface" = "true" ] || [ "$iface" = "false" ]; then
+                    enabled="$iface"; iface=""
+                fi
+                local icon="🟢"; [ "$enabled" != "true" ] && icon="🔴"
+                local addr_info=""; [ -n "$addr" ] && addr_info=" — ${addr}"
+                [ -n "$iface" ] && addr_info+=" [${iface}]"
+                msg+="${icon} *$(_esc "$name")* (${type}${addr_info}) w:${weight}\n"
+            done < "$uf"
+            tg_send "$msg"
+            ;;
+        /mp_help|/mp_help@*)
+            tg_send "📋 *MTProxyMax Commands*\n\n/mp\\_status — Proxy status\n/mp\\_secrets — List secrets\n/mp\\_link — Get proxy links + QR\n/mp\\_add <label> — Add secret\n/mp\\_remove <label> — Remove secret\n/mp\\_rotate <label> — Rotate secret\n/mp\\_enable <label> — Enable secret\n/mp\\_disable <label> — Disable secret\n/mp\\_limits — Show user limits\n/mp\\_setlimit — Set user limits\n/mp\\_upstreams — List upstreams\n/mp\\_traffic — Traffic report\n/mp\\_health — Health check\n/mp\\_restart — Restart proxy\n/mp\\_update — Check for updates\n/mp\\_help — This help"
+            ;;
+    esac
+}
+
+# Cleanup trap for temp files
+trap 'rm -f /tmp/.mtproxymax-tg.* 2>/dev/null' EXIT
+
+# Main loop
+echo "$$" > "$PID_FILE"
+mkdir -p "$(dirname "$OFFSET_FILE")"
+load_tg_settings
+load_traffic
+
+_last_report=0
+_report_interval=$(( ${TELEGRAM_INTERVAL:-6} * 3600 ))
+_last_health=0
+_last_traffic_update=0
+_last_enforcement=0
+declare -A _prev_log_in=()
+declare -A _prev_log_out=()
+
+while true; do
+    load_tg_settings
+    _report_interval=$(( ${TELEGRAM_INTERVAL:-6} * 3600 ))
+    # Update traffic counters every 60 seconds (always, even if bot is disabled)
+    _now=$(date +%s)
+    if [ $((_now - _last_traffic_update)) -ge 60 ] && is_running; then
+        _last_traffic_update=$_now
+        update_traffic 2>/dev/null
+
+        # Connection log: append per-user activity (delta = current cumulative - previous cumulative)
+        _connlog="${INSTALL_DIR}/connection.log"
+        _ts=$(date '+%Y-%m-%d %H:%M')
+        [ -f "$SECRETS_FILE" ] && while IFS='|' read -r label secret created enabled _mc _mi _q _ex _notes; do
+            [[ "$label" =~ ^# ]] && continue
+            [ -z "$label" ] && continue
+            [ "$enabled" != "true" ] && continue
+            _ci=${_cum_user_in[$label]:-0}; _co=${_cum_user_out[$label]:-0}
+            _pci=${_prev_log_in[$label]:-0}; _pco=${_prev_log_out[$label]:-0}
+            _di=$((_ci - _pci)); _do=$((_co - _pco))
+            [ "$_di" -le 0 ] && [ "$_do" -le 0 ] && { _prev_log_in[$label]=$_ci; _prev_log_out[$label]=$_co; continue; }
+            [ "$_di" -lt 0 ] && _di=0; [ "$_do" -lt 0 ] && _do=0
+            echo "${_ts} ${label}: ↓$(format_bytes $_di) ↑$(format_bytes $_do)" >> "$_connlog"
+            _prev_log_in[$label]=$_ci; _prev_log_out[$label]=$_co
+        done < "$SECRETS_FILE"
+        # Auto-rotate: keep last 8000 lines if over 10000
+        if [ -f "$_connlog" ]; then
+            _lc=$(wc -l < "$_connlog" 2>/dev/null) || _lc=0
+            [ "$_lc" -gt 10000 ] && tail -n 8000 "$_connlog" > "${_connlog}.tmp" && mv "${_connlog}.tmp" "$_connlog"
+        fi
+    fi
+
+    # Quota enforcement + expiry checks every 5 min (runs even if Telegram is disabled)
+    if [ $((_now - _last_enforcement)) -ge 300 ]; then
+        _last_enforcement=$_now
+
+        # Quota enforcement (auto-disable secrets that exceeded quota)
+        _quota_file="${INSTALL_DIR}/relay_stats/.quota_alerts_sent"
+        [ -f "$SECRETS_FILE" ] && while IFS='|' read -r label secret created enabled _mc _mi _q _ex _notes; do
+            [[ "$label" =~ ^# ]] && continue
+            [ -z "$label" ] || [ "$_q" = "0" ] || [ -z "$_q" ] && continue
+            [ "$enabled" != "true" ] && continue
+            total_bytes=$(( ${_cum_user_in[$label]:-0} + ${_cum_user_out[$label]:-0} ))
+            [ "$total_bytes" -le 0 ] && continue
+            pct=$(( total_bytes * 100 / _q ))
+            if [ "$pct" -ge 100 ]; then
+                if ! grep -q "^${label}|100$" "$_quota_file" 2>/dev/null; then
+                    if "${INSTALL_DIR}/mtproxymax" secret disable "$label" &>/dev/null; then
+                        [ "$TELEGRAM_ENABLED" = "true" ] && tg_send "🔴 *Quota Exceeded — Auto-disabled*\n\nSecret *$(_esc "$label")* used $(format_bytes $total_bytes) of $(format_bytes $_q) (${pct}%)\n\nRe-enable: \`mtproxymax secret reenable $label\`"
+                    else
+                        [ "$TELEGRAM_ENABLED" = "true" ] && tg_send "⚠️ *Quota Exceeded*\n\nSecret *$(_esc "$label")* used $(format_bytes $total_bytes) of $(format_bytes $_q) (${pct}%) — cannot auto-disable (last active secret)"
+                    fi
+                    echo "${label}|100" >> "$_quota_file"
+                fi
+            elif [ "$pct" -ge 80 ]; then
+                if ! grep -q "^${label}|80$" "$_quota_file" 2>/dev/null; then
+                    [ "$TELEGRAM_ENABLED" = "true" ] && tg_send "⚠️ *Quota Warning*\n\nSecret *$(_esc "$label")* has used $(format_bytes $total_bytes) of $(format_bytes $_q) (${pct}%)"
+                    echo "${label}|80" >> "$_quota_file"
+                fi
+            fi
+        done < "$SECRETS_FILE"
+
+        # Secret expiry warnings
+        if [ "$TELEGRAM_ENABLED" = "true" ] && [ "$TELEGRAM_ALERTS_ENABLED" = "true" ]; then
+            _expiry_file="${INSTALL_DIR}/relay_stats/.expiry_alerts_sent"
+            _today=$(date +%Y-%m-%d)
+            [ -f "$SECRETS_FILE" ] && while IFS='|' read -r label secret created enabled _mc _mi _q _ex _notes; do
+                [[ "$label" =~ ^# ]] && continue
+                [ -z "$label" ] && continue
+                [ "$_ex" = "0" ] || [ -z "$_ex" ] && continue
+                exp_e=$(date -d "${_ex}" +%s 2>/dev/null) || continue
+                days_left=$(( (exp_e - _now) / 86400 ))
+                if [ "$days_left" -le 3 ] && [ "$days_left" -ge 0 ]; then
+                    if ! grep -q "^${label}:${_today}$" "$_expiry_file" 2>/dev/null; then
+                        tg_send "⚠️ *Expiry Warning*\n\nSecret *$(_esc "$label")* expires in *${days_left} day(s)* (${_ex})"
+                        echo "${label}:${_today}" >> "$_expiry_file"
+                    fi
+                elif [ "$days_left" -lt 0 ]; then
+                    if ! grep -q "^${label}:expired:${_today}$" "$_expiry_file" 2>/dev/null; then
+                        tg_send "🔴 *Secret Expired*\n\nSecret *$(_esc "$label")* expired on ${_ex}"
+                        echo "${label}:expired:${_today}" >> "$_expiry_file"
+                    fi
+                fi
+            done < "$SECRETS_FILE"
+            [ -f "$_expiry_file" ] && grep -q ":${_today}" "$_expiry_file" 2>/dev/null && \
+                grep ":${_today}" "$_expiry_file" > "${_expiry_file}.tmp" 2>/dev/null && \
+                mv "${_expiry_file}.tmp" "$_expiry_file" 2>/dev/null || true
+        fi
+    fi
+
+    [ "$TELEGRAM_ENABLED" != "true" ] && sleep 30 && continue
+
+    # Process bot commands
+    process_commands 2>/dev/null
+
+    # Health check every 5 minutes
+    if [ $((_now - _last_health)) -ge 300 ]; then
+        _last_health=$_now
+        if [ "$TELEGRAM_ALERTS_ENABLED" = "true" ] && ! is_running; then
+            tg_send "🔴 *Alert*: Proxy is down! Attempting auto-restart..."
+            "${INSTALL_DIR}/mtproxymax" start &>/dev/null
+            sleep 5
+            if is_running; then
+                tg_send "✅ Proxy auto-recovered"
+            else
+                tg_send "❌ Auto-recovery failed — manual intervention needed"
+            fi
+        fi
+    fi
+
+    # Periodic report
+    if [ $((_now - _last_report)) -ge $_report_interval ]; then
+        _last_report=$_now
+        if is_running; then
+            stats=$(get_stats)
+            conns=$(echo "$stats"|awk '{print $3}')
+            up=$(get_uptime)
+            cum=$(get_cum_traffic)
+            ct_in=$(echo "$cum"|awk '{print $1}')
+            ct_out=$(echo "$cum"|awk '{print $2}')
+            tg_send "📊 *Periodic Report*\n\n🟢 Running | ⏱ $(format_duration $up)\n👥 Connections: ${conns}\n📊 ↓ $(format_bytes $ct_in) ↑ $(format_bytes $ct_out)"
+        fi
+    fi
+
+    sleep 30
+done
+TELEGRAM_SCRIPT
+
+    chmod +x "$script_path"
+}
+
+setup_telegram_service() {
+    telegram_generate_service_script
+
+    # Create systemd service
+    if command -v systemctl &>/dev/null; then
+        cat > /etc/systemd/system/mtproxymax-telegram.service << 'SERVICE_EOF'
+[Unit]
+Description=MTProxyMax Telegram Bot Service
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /opt/mtproxymax/mtproxymax-telegram.sh
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+SERVICE_EOF
+
+        systemctl daemon-reload
+        systemctl enable mtproxymax-telegram.service 2>/dev/null
+        systemctl restart mtproxymax-telegram.service 2>/dev/null
+        log_success "Telegram bot service started"
+    fi
+}
+
+# ── Section 15: Installation Wizard ──────────────────────────
+
+run_installer() {
+    show_banner
+
+    echo -e "  ${BRIGHT_GREEN}Добро пожаловать в MTProxyMax — универсальный менеджер Telegram-прокси${NC}"
+    echo -e "  ${DIM}от r00t-men GiS ;-) ${NC}"
+    echo ""
+
+    check_root "$@"
+
+    # Check if already installed
+    if [ -f "${INSTALL_DIR}/mtproxymax" ]; then
+        echo -e "  ${YELLOW}MTProxyMax уже установлен.${NC}"
+        echo ""
+        echo -e "  ${DIM}[1]${NC} Открыть меню управления"
+        echo -e "  ${DIM}[2]${NC} Переустановить"
+        echo -e "  ${DIM}[3]${NC} Удалить"
+        echo -e "  ${DIM}[0]${NC} Выход"
+
+        local choice
+        choice=$(read_choice "Выбор" "1")
+        case "$choice" in
+            1) load_settings; load_secrets; show_main_menu; return ;;
+            2) ;; # Continue with install
+            3) uninstall; return ;;
+            *) exit 0 ;;
+        esac
+    fi
+
+    draw_header "INSTALLATION"
+    echo ""
+
+    # Install dependencies
+    check_dependencies
+
+    # Install Docker
+    install_docker || exit 1
+    wait_for_docker || exit 1
+
+    echo ""
+    draw_header "PROXY CONFIGURATION"
+    echo ""
+
+    # Port
+    echo -e "  ${BOLD}Порт прокси${NC} ${DIM}(по умолчанию: 443)${NC}"
+    echo -en "  ${DIM}Введите port [443]:${NC} "
+    local port_input
+    read -r port_input
+    if [ -n "$port_input" ]; then
+        if validate_port "$port_input"; then
+            PROXY_PORT="$port_input"
+        else
+            log_warn "Invalid port, using default (443)"
+        fi
+    fi
+
+    # Custom IP
+    echo ""
+    local _detected_ip
+    _detected_ip=$(CUSTOM_IP="" get_public_ip)
+    echo -e "  ${BOLD}IP сервера или домен${NC} ${DIM}(используется в ссылках прокси — подходит и IP, и hostname)${NC}"
+    echo -en "  ${DIM}Detected: ${_detected_ip:-unknown} — Введите custom IP/domain or press Введите [${_detected_ip:-auto}]:${NC} "
+    local ip_input
+    read -r ip_input
+    if [ -n "$ip_input" ]; then
+        if [[ "$ip_input" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$ip_input" =~ ^[0-9a-fA-F:]+$ ]] || [[ "$ip_input" =~ ^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$ ]]; then
+            CUSTOM_IP="$ip_input"
+        else
+            log_warn "Invalid IP/domain, using auto-detected"
+        fi
+    fi
+
+    # Domain
+    echo ""
+    echo -e "  ${BOLD}Домен FakeTLS${NC} ${DIM}(ваш прокси будет выглядеть как HTTPS к этому сайту)${NC}"
+    echo -e "  ${DIM}[1]${NC} cloudflare.com ${DIM}(рекомендуется)${NC}"
+    echo -e "  ${DIM}[2]${NC} www.google.com"
+    echo -e "  ${DIM}[3]${NC} www.microsoft.com"
+    echo -e "  ${DIM}[4]${NC} Свой домен"
+
+    local domain_choice
+    domain_choice=$(read_choice "Выбор" "1")
+    case "$domain_choice" in
+        2) PROXY_DOMAIN="www.google.com" ;;
+        3) PROXY_DOMAIN="www.microsoft.com" ;;
+        4)
+            echo -en "  ${DIM}Введите domain:${NC} "
+            local custom_domain
+            read -r custom_domain
+            if [ -n "$custom_domain" ] && validate_domain "$custom_domain"; then
+                PROXY_DOMAIN="$custom_domain"
+            elif [ -n "$custom_domain" ]; then
+                log_error "Invalid domain format"
+            fi
+            ;;
+        *) PROXY_DOMAIN="cloudflare.com" ;;
+    esac
+
+    # Traffic masking
+    echo ""
+    echo -e "  ${BOLD}Маскировка трафика${NC} ${DIM}(перенаправлять DPI-пробы на реальный сайт)${NC}"
+    echo -en "  ${DIM}Enable? [Y/n]:${NC} "
+    local mask_input
+    read -r mask_input
+    case "$mask_input" in
+        n|N|no) MASKING_ENABLED="false" ;;
+        *) MASKING_ENABLED="true" ;;
+    esac
+
+    # Ad-tag
+    echo ""
+    echo -e "  ${BOLD}Ad-tag${NC} ${DIM}(необязательно)${NC}"
+    echo -e "  ${DIM}Telegram может закрепить спонсируемый канал вверху списка чатов ваших пользователей${NC}"
+    echo -e "  ${DIM}при подключении через ваш прокси. Чтобы получить ad-tag,${NC}"
+    echo -e "  ${DIM}напишите @MTProxyBot в Telegram. Большинство приватных прокси это пропускают.${NC}"
+    echo -en "  ${DIM}Enable ad-tag? [y/N]:${NC} "
+    local adtag_choice
+    read -r adtag_choice
+    case "$adtag_choice" in
+        y|Y|yes)
+            echo -en "  ${DIM}Введите ad-tag hex:${NC} "
+            local adtag_input
+            read -r adtag_input
+            if [[ "$adtag_input" =~ ^[0-9a-fA-F]{32}$ ]]; then
+                AD_TAG="$adtag_input"
+            else
+                log_warn "Invalid ad-tag (must be 32 hex characters), skipping"
+            fi
+            ;;
+    esac
+
+    # Resource limits
+    echo ""
+    echo -e "  ${BOLD}Лимиты ресурсов${NC}"
+    echo -en "  ${DIM}Введите CPU cores [unlimited]:${NC} "
+    local cpu_input
+    read -r cpu_input
+    if [ -n "$cpu_input" ]; then
+        if [[ "$cpu_input" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
+            # Ensure minimum 0.1 CPU
+            if awk "BEGIN{exit ($cpu_input < 0.1)}" 2>/dev/null; then
+                PROXY_CPUS="$cpu_input"
+            else
+                log_warn "CPU must be at least 0.1, keeping ${PROXY_CPUS:-unlimited}"
+            fi
+        else
+            log_warn "Invalid CPU value (must be a number, e.g. 1, 2, 0.5), keeping ${PROXY_CPUS:-unlimited}"
+        fi
+    fi
+
+    echo -en "  ${DIM}Введите memory limit [unlimited]:${NC} "
+    local mem_input
+    read -r mem_input
+    if [ -n "$mem_input" ]; then
+        if [[ "$mem_input" =~ ^[0-9]+[bBkKmMgG]?$ ]]; then
+            # Default bare numbers to megabytes
+            [[ "$mem_input" =~ ^[0-9]+$ ]] && mem_input="${mem_input}m"
+            PROXY_MEMORY="$mem_input"
+        else
+            log_warn "Invalid memory value (e.g. 256m, 1g), keeping ${PROXY_MEMORY:-unlimited}"
+        fi
+    fi
+
+    # First secret
+    echo ""
+    draw_header "PROXY SECRET"
+    echo ""
+    echo -e "  ${DIM}Секретный ключ для вашего прокси будет создан автоматически.${NC}"
+    echo -e "  ${DIM}Пользователям нужен этот ключ для подключения. Дайте ему имя для удобства.${NC}"
+    echo -en "  ${DIM}Введите label [default]:${NC} "
+    local first_label
+    read -r first_label
+    [ -z "$first_label" ] && first_label="default"
+    if ! [[ "$first_label" =~ ^[a-zA-Z0-9_-]+$ ]] || [ ${#first_label} -gt 32 ]; then
+        log_warn "Invalid label, using 'default'"
+        first_label="default"
+    fi
+
+    local first_secret
+    first_secret=$(generate_secret)
+    SECRETS_LABELS=("$first_label")
+    SECRETS_KEYS=("$first_secret")
+    SECRETS_CREATED=("$(date +%s)")
+    SECRETS_ENABLED=("true")
+    SECRETS_MAX_CONNS=("0")
+    SECRETS_MAX_IPS=("0")
+    SECRETS_QUOTA=("0")
+    SECRETS_EXPIRES=("0")
+    SECRETS_NOTES=("")
+
+    # Save everything
+    mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" "$STATS_DIR" "$BACKUP_DIR"
+    chmod 700 "$CONFIG_DIR" "$INSTALL_DIR"
+    save_settings
+    save_secrets
+
+    # Copy script to install dir
+    local script_source="${BASH_SOURCE[0]}"
+    if [ -f "$script_source" ]; then
+        cp "$script_source" "${INSTALL_DIR}/mtproxymax"
+        chmod +x "${INSTALL_DIR}/mtproxymax"
+    fi
+
+    # Create symlink
+    ln -sf "${INSTALL_DIR}/mtproxymax" /usr/local/bin/mtproxymax
+
+    # Start proxy
+    echo ""
+    draw_header "ЗАПУСК PROXY"
+    echo ""
+    run_proxy_container || {
+        log_error "Failed to start proxy"
+        echo -e "  ${DIM}Проверка: docker logs mtproxymax${NC}"
+    }
+
+    # Setup autostart
+    setup_autostart
+
+    # Telegram setup offer
+    echo ""
+    echo -e "  ${BOLD}Telegram-бот${NC} ${DIM}(управление прокси с телефона)${NC}"
+    echo -en "  ${DIM}Set up Telegram bot now? [y/N]:${NC} "
+    local tg_choice
+    read -r tg_choice
+    case "$tg_choice" in
+        y|Y|yes) telegram_setup_wizard ;;
+    esac
+
+    # Summary
+    show_install_summary
+
+    # Transition to main menu
+    echo ""
+    echo -en "  ${DIM}Press any key to open the management menu...${NC}"
+    read -rsn1
+    read -rsn 256 -t 0.05 _ 2>/dev/null || true
+    load_settings
+    load_secrets
+    show_main_menu
+}
+
+setup_autostart() {
+    if command -v systemctl &>/dev/null; then
+        cat > /etc/systemd/system/mtproxymax.service << 'AUTOSTART_EOF'
+[Unit]
+Description=MTProxyMax Telegram Proxy
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/mtproxymax start
+ExecStop=/usr/local/bin/mtproxymax stop
+
+[Install]
+WantedBy=multi-user.target
+AUTOSTART_EOF
+
+        systemctl daemon-reload
+        systemctl enable mtproxymax.service 2>/dev/null
+        log_success "Auto-start enabled (systemd)"
+    fi
+}
+
+show_install_summary() {
+    echo ""
+    local w=$TERM_WIDTH
+
+    draw_box_top "$w"
+    draw_box_center "${BRIGHT_GREEN}${BOLD}INSTALLATION COMPLETE${NC}" "$w"
+    draw_box_sep "$w"
+    draw_box_empty "$w"
+
+    local server_ip
+    server_ip=$(get_public_ip)
+
+    draw_box_line "  ${BOLD}Server:${NC} ${server_ip:-detecting...}" "$w"
+    draw_box_line "  ${BOLD}Port:${NC}   ${PROXY_PORT}" "$w"
+    draw_box_line "  ${BOLD}Domain:${NC} ${PROXY_DOMAIN}" "$w"
+    draw_box_line "  ${BOLD}Движок:${NC} telemt (Rust)" "$w"
+    draw_box_empty "$w"
+
+    if [ -n "$server_ip" ]; then
+        draw_box_sep "$w"
+        draw_box_center "${BOLD}PROXY LINKS${NC}" "$w"
+        draw_box_empty "$w"
+
+        local i
+        for i in "${!SECRETS_LABELS[@]}"; do
+            [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+            local full_secret
+            full_secret=$(build_faketls_secret "${SECRETS_KEYS[$i]}")
+            draw_box_line "  ${BRIGHT_GREEN}${SECRETS_LABELS[$i]}:${NC}" "$w"
+            draw_box_line "  ${CYAN}tg://proxy?server=${server_ip}&port=${PROXY_PORT}&secret=${full_secret}${NC}" "$w"
+            draw_box_line "  ${CYAN}https://t.me/proxy?server=${server_ip}&port=${PROXY_PORT}&secret=${full_secret}${NC}" "$w"
+            draw_box_empty "$w"
+        done
+    fi
+
+    draw_box_sep "$w"
+    draw_box_center "${BOLD}COMMANDS${NC}" "$w"
+    draw_box_empty "$w"
+    draw_box_line "  ${GREEN}mtproxymax${NC}              Open management menu" "$w"
+    draw_box_line "  ${GREEN}mtproxymax status${NC}       Show proxy status" "$w"
+    draw_box_line "  ${GREEN}mtproxymax secret add${NC}   Add a new user" "$w"
+    draw_box_line "  ${GREEN}mtproxymax help${NC}         Show all commands" "$w"
+    draw_box_empty "$w"
+    draw_box_sep "$w"
+    draw_box_line "  ${YELLOW}Firewall: Allow TCP port ${PROXY_PORT}${NC}" "$w"
+    draw_box_bottom "$w"
+    echo ""
+
+    # Show QR for first secret
+    if [ -n "$server_ip" ]; then
+        for i in "${!SECRETS_LABELS[@]}"; do
+            [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+            local link
+            link=$(get_proxy_link_https "${SECRETS_LABELS[$i]}")
+            show_qr "$link"
+            break
+        done
+    fi
+}
+
+# ── Section 16: Uninstall ───────────────────────────────────
+
+uninstall() {
+    clear_screen
+    echo ""
+    echo -e "  ${BRIGHT_RED}${BOLD}УДАЛЕНИЕ MTPROXYMAX${NC}"
+    echo ""
+    echo -e "  ${YELLOW}Будет удалено:${NC}"
+    echo -e "  ${DIM}- Контейнер прокси и Docker-образ${NC}"
+    echo -e "  ${DIM}- Вся конфигурация и секреты${NC}"
+    echo -e "  ${DIM}- Сервисы systemd${NC}"
+    echo -e "  ${DIM}- Символическая ссылка /usr/local/bin/mtproxymax${NC}"
+    echo ""
+    echo -e "  ${RED}Сам Docker удалён НЕ будет.${NC}"
+    echo ""
+
+    echo -en "  ${BOLD}Type 'yes' to confirm:${NC} "
+    local confirm
+    read -r confirm
+    [ "$confirm" != "yes" ] && { log_info "Cancelled"; return; }
+
+    # Offer secrets export
+    echo -en "  ${BOLD}Export secrets before removal? [y/N]:${NC} "
+    local export_choice
+    read -r export_choice
+    if [ "$export_choice" = "y" ] || [ "$export_choice" = "Y" ]; then
+        local export_file="${HOME}/mtproxymax-secrets-backup.txt"
+        cp "$SECRETS_FILE" "$export_file" 2>/dev/null
+        chmod 600 "$export_file" 2>/dev/null
+        log_success "Secrets exported to ${export_file}"
+    fi
+
+    echo ""
+    log_info "Removing services..."
+    systemctl stop mtproxymax-telegram.service 2>/dev/null || true
+    systemctl disable mtproxymax-telegram.service 2>/dev/null || true
+    rm -f /etc/systemd/system/mtproxymax-telegram.service
+
+    systemctl stop mtproxymax.service 2>/dev/null || true
+    systemctl disable mtproxymax.service 2>/dev/null || true
+    rm -f /etc/systemd/system/mtproxymax.service
+
+    systemctl daemon-reload 2>/dev/null || true
+
+    log_info "Removing geo-blocking rules..."
+    geoblock_remove_all
+
+    log_info "Removing traffic tracking..."
+    traffic_tracking_teardown
+
+    log_info "Removing container..."
+    docker stop "$CONTAINER_NAME" 2>/dev/null || true
+    docker rm -f "$CONTAINER_NAME" 2>/dev/null || true
+
+    log_info "Removing Docker image..."
+    docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep "^${DOCKER_IMAGE_BASE}:" | xargs -r docker rmi 2>/dev/null || true
+    # Clean up dangling build cache from Rust compilation
+    docker builder prune -f 2>/dev/null || true
+
+    log_info "Removing files..."
+    rm -rf "$INSTALL_DIR"
+    rm -f /usr/local/bin/mtproxymax
+
+    echo ""
+    log_success "MTProxyMax has been fully uninstalled"
+    echo ""
+}
+
+# ── Section 17: CLI Dispatcher ──────────────────────────────
+
+# ── Multi-Port Instances ────────────────────────────────────
+
+declare -a INSTANCE_PORTS=()
+declare -a INSTANCE_METRICS_PORTS=()
+declare -a INSTANCE_ENABLED=()
+declare -a INSTANCE_LABELS=()
+
+load_instances() {
+    INSTANCE_PORTS=()
+    INSTANCE_METRICS_PORTS=()
+    INSTANCE_ENABLED=()
+    INSTANCE_LABELS=()
+    [ -f "$INSTANCES_FILE" ] || return 0
+    while IFS='|' read -r port mport enabled label; do
+        [[ "$port" =~ ^[[:space:]]*# ]] && continue
+        [[ "$port" =~ ^[0-9]+$ ]] || continue
+        INSTANCE_PORTS+=("$port")
+        INSTANCE_METRICS_PORTS+=("${mport:-9091}")
+        INSTANCE_ENABLED+=("${enabled:-true}")
+        INSTANCE_LABELS+=("${label:-port-${port}}")
+    done < "$INSTANCES_FILE"
+}
+
+save_instances() {
+    local tmp; tmp=$(_mktemp) || return 1
+    echo "# MTProxyMax Instances — Format: PORT|METRICS_PORT|ENABLED|LABEL" > "$tmp"
+    local i
+    for i in "${!INSTANCE_PORTS[@]}"; do
+        echo "${INSTANCE_PORTS[$i]}|${INSTANCE_METRICS_PORTS[$i]}|${INSTANCE_ENABLED[$i]}|${INSTANCE_LABELS[$i]}" >> "$tmp"
+    done
+    chmod 600 "$tmp"
+    mv "$tmp" "$INSTANCES_FILE"
+}
+
+_next_free_metrics_port() {
+    local p=9091
+    while [ $p -lt 9200 ]; do
+        local used=false
+        # Check against primary metrics port
+        [ "$p" = "${PROXY_METRICS_PORT:-9090}" ] && used=true
+        # Check against existing instance metrics ports
+        if [ "$used" = "false" ]; then
+            for mp in "${INSTANCE_METRICS_PORTS[@]}"; do
+                [ "$mp" = "$p" ] && used=true && break
+            done
+        fi
+        [ "$used" = "false" ] && { echo "$p"; return; }
+        ((p++))
+    done
+    echo "9091"
+}
+
+instance_add() {
+    local port="$1" label="${2:-port-${1}}"
+    validate_port "$port" || return 1
+
+    # Check not same as primary
+    [ "$port" = "$PROXY_PORT" ] && { log_error "Port ${port} is already the primary proxy port"; return 1; }
+
+    # Check not duplicate
+    local i
+    for i in "${!INSTANCE_PORTS[@]}"; do
+        [ "${INSTANCE_PORTS[$i]}" = "$port" ] && { log_error "Instance on port ${port} already exists"; return 1; }
+    done
+
+    local mport; mport=$(_next_free_metrics_port)
+
+    INSTANCE_PORTS+=("$port")
+    INSTANCE_METRICS_PORTS+=("$mport")
+    INSTANCE_ENABLED+=("true")
+    INSTANCE_LABELS+=("$label")
+    save_instances
+
+    # Generate config for this instance
+    local inst_config="${CONFIG_DIR}/config-${port}.toml"
+    local _orig_port="$PROXY_PORT" _orig_mport="$PROXY_METRICS_PORT"
+    PROXY_PORT="$port"
+    PROXY_METRICS_PORT="$mport"
+    generate_telemt_config
+    mv "${CONFIG_DIR}/config.toml" "$inst_config" 2>/dev/null
+    PROXY_PORT="$_orig_port"
+    PROXY_METRICS_PORT="$_orig_mport"
+    # Regenerate primary config
+    generate_telemt_config
+
+    # Start container
+    local cname="mtproxymax-${port}"
+    local _docker_args=(
+        --name "$cname"
+        --restart unless-stopped
+        --network host
+        --ulimit nofile=65535:65535
+        --log-opt max-size=10m
+        --log-opt max-file=3
+    )
+    docker run -d "${_docker_args[@]}" \
+        -v "${inst_config}:/etc/telemt.toml:ro" \
+        "$(get_docker_image)" /etc/telemt.toml &>/dev/null
+
+    log_success "Instance started on port ${port} (container: ${cname}, metrics: ${mport})"
+}
+
+instance_remove() {
+    local port="$1"
+    local idx=-1 i
+    for i in "${!INSTANCE_PORTS[@]}"; do
+        [ "${INSTANCE_PORTS[$i]}" = "$port" ] && idx=$i && break
+    done
+    [ "$idx" = "-1" ] && { log_error "No instance on port ${port}"; return 1; }
+
+    # Stop and remove container
+    local cname="mtproxymax-${port}"
+    docker stop "$cname" &>/dev/null || true
+    docker rm -f "$cname" &>/dev/null || true
+
+    # Remove config
+    rm -f "${CONFIG_DIR}/config-${port}.toml"
+
+    # Remove from arrays
+    local new_ports=() new_mports=() new_enabled=() new_labels=()
+    for i in "${!INSTANCE_PORTS[@]}"; do
+        [ "$i" = "$idx" ] && continue
+        new_ports+=("${INSTANCE_PORTS[$i]}")
+        new_mports+=("${INSTANCE_METRICS_PORTS[$i]}")
+        new_enabled+=("${INSTANCE_ENABLED[$i]}")
+        new_labels+=("${INSTANCE_LABELS[$i]}")
+    done
+    INSTANCE_PORTS=("${new_ports[@]}")
+    INSTANCE_METRICS_PORTS=("${new_mports[@]}")
+    INSTANCE_ENABLED=("${new_enabled[@]}")
+    INSTANCE_LABELS=("${new_labels[@]}")
+    save_instances
+
+    log_success "Instance on port ${port} removed"
+}
+
+instance_list() {
+    echo ""
+    draw_header "PROXY INSTANCES"
+    echo ""
+    echo -e "  ${BOLD}Основной:${NC} порт ${PROXY_PORT} (контейнер: ${CONTAINER_NAME})"
+    local running; is_proxy_running && running="${GREEN}running${NC}" || running="${RED}stopped${NC}"
+    echo -e "    Статус: ${running}"
+    echo ""
+
+    if [ ${#INSTANCE_PORTS[@]} -eq 0 ]; then
+        echo -e "  ${DIM}Дополнительных экземпляров нет${NC}"
+    else
+        local i
+        for i in "${!INSTANCE_PORTS[@]}"; do
+            local port="${INSTANCE_PORTS[$i]}" label="${INSTANCE_LABELS[$i]}"
+            local cname="mtproxymax-${port}"
+            local st
+            docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${cname}$" && st="${GREEN}running${NC}" || st="${RED}stopped${NC}"
+            echo -e "  ${BOLD}${label}:${NC} порт ${port} (контейнер: ${cname})"
+            echo -e "    Статус: ${st} | Метрики: ${INSTANCE_METRICS_PORTS[$i]}"
+        done
+    fi
+    echo ""
+}
+
+# ── Backup / Restore ────────────────────────────────────────
+
+create_backup() {
+    mkdir -p "$BACKUP_DIR"
+    local ts; ts=$(date '+%Y%m%d-%H%M%S')
+    local backup_file="${BACKUP_DIR}/mtproxymax-${ts}.tar.gz"
+
+    # Create metadata
+    local meta_tmp; meta_tmp=$(_mktemp) || return 1
+    echo "version=${VERSION}" > "$meta_tmp"
+    echo "date=$(date -u '+%Y-%m-%d %H:%M:%S UTC')" >> "$meta_tmp"
+    echo "hostname=$(hostname 2>/dev/null || echo unknown)" >> "$meta_tmp"
+    cp "$meta_tmp" "${INSTALL_DIR}/backup_meta.txt"
+    rm -f "$meta_tmp"
+
+    # Build file list (only existing files)
+    local files=()
+    for f in settings.conf secrets.conf upstreams.conf instances.conf backup_meta.txt connection.log; do
+        [ -f "${INSTALL_DIR}/$f" ] && files+=("$f")
+    done
+    [ -d "$STATS_DIR" ] && files+=("relay_stats")
+
+    tar czf "$backup_file" -C "$INSTALL_DIR" --exclude='*.lock' "${files[@]}" 2>/dev/null
+    chmod 600 "$backup_file"
+    rm -f "${INSTALL_DIR}/backup_meta.txt"
+
+    log_success "Backup created: ${backup_file}"
+    echo "$backup_file"
+}
+
+restore_backup() {
+    local backup_file="$1"
+    [ -z "$backup_file" ] && { log_error "Usage: mtproxymax restore <backup_file>"; return 1; }
+    [ ! -f "$backup_file" ] && { log_error "File not found: ${backup_file}"; return 1; }
+
+    # Validate backup
+    if ! tar tzf "$backup_file" 2>/dev/null | grep -q "settings.conf"; then
+        log_error "Invalid backup file (missing settings.conf)"
+        return 1
+    fi
+
+    # Show metadata
+    local meta; meta=$(tar xzf "$backup_file" -O backup_meta.txt 2>/dev/null)
+    if [ -n "$meta" ]; then
+        echo ""
+        echo -e "  ${BOLD}Информация о резервной копии:${NC}"
+        echo "$meta" | while IFS='=' read -r k v; do echo -e "    ${k}: ${v}"; done
+        echo ""
+    fi
+
+    echo -en "  ${YELLOW}This will overwrite current configuration. Continue? [y/N]:${NC} "
+    local confirm; read -r confirm
+    [[ "$confirm" =~ ^[yY] ]] || { log_info "Restore cancelled"; return 0; }
+
+    # Create backup of current state first
+    log_info "Backing up current state..."
+    create_backup &>/dev/null
+
+    # Extract
+    tar xzf "$backup_file" -C "$INSTALL_DIR" --exclude='backup_meta.txt' 2>/dev/null
+    chmod 600 "${SECRETS_FILE}" 2>/dev/null
+
+    log_success "Backup restored from: ${backup_file}"
+    log_info "Run 'mtproxymax restart' to apply changes"
+}
+
+list_backups() {
+    mkdir -p "$BACKUP_DIR"
+    local files; files=$(ls -1t "${BACKUP_DIR}"/mtproxymax-*.tar.gz 2>/dev/null)
+    if [ -z "$files" ]; then
+        log_info "No backups found in ${BACKUP_DIR}"
+        return
+    fi
+    echo ""
+    draw_header "BACKUPS"
+    echo ""
+    echo "$files" | while read -r f; do
+        local size; size=$(du -h "$f" 2>/dev/null | awk '{print $1}')
+        echo -e "  ${BOLD}$(basename "$f")${NC}  ${DIM}(${size})${NC}"
+    done
+    echo ""
+}
+
+show_cli_help() {
+    echo ""
+    echo -e "  ${BRIGHT_CYAN}${BOLD}MTProxyMax${NC} ${DIM}v${VERSION}${NC} — The Ultimate Telegram Proxy Manager"
+    echo -e "  ${DIM}от r00t-men GiS ;-)${NC}"
+    echo ""
+    echo -e "  ${BOLD}Использование:${NC} mtproxymax <command> [options]"
+    echo ""
+    echo -e "  ${BOLD}Управление прокси:${NC}"
+    echo -e "    ${GREEN}start${NC}              Запустить прокси"
+    echo -e "    ${GREEN}stop${NC}               Остановить прокси"
+    echo -e "    ${GREEN}restart${NC}            Перезапустить прокси"
+    echo -e "    ${GREEN}status${NC}             Показать статус прокси"
+    echo ""
+    echo -e "  ${BOLD}Управление секретами:${NC}"
+    echo -e "    ${GREEN}secret add${NC} <label>      Добавить новый секрет"
+    echo -e "    ${GREEN}secret add-batch${NC} <l1> <l2> ...  Добавить несколько секретов (один перезапуск)"
+    echo -e "    ${GREEN}secret remove${NC} <label>   Удалить секрет"
+    echo -e "    ${GREEN}secret remove-batch${NC} <l1> <l2> ...  Удалить несколько секретов (один перезапуск)"
+    echo -e "    ${GREEN}secret list${NC}             Показать все секреты"
+    echo -e "    ${GREEN}secret rotate${NC} <label>   Переcоздать секрет"
+    echo -e "    ${GREEN}secret link${NC} [label]     Показать ссылку прокси"
+    echo -e "    ${GREEN}secret qr${NC} [label]       Показать QR-код"
+    echo -e "    ${GREEN}secret enable${NC} <label>   Включить секрет"
+    echo -e "    ${GREEN}secret disable${NC} <label>  Выключить секрет"
+    echo -e "    ${GREEN}secret limits${NC} [label]   Показать лимиты пользователя"
+    echo -e "    ${GREEN}secret setlimit${NC} <label> conns|ips|quota|expires <value> [--no-restart]"
+    echo -e "    ${GREEN}secret setlimits${NC} <label> <conns> <ips> <quota> [expires] [--no-restart]"
+    echo -e "    ${GREEN}secret reset-traffic${NC} <label|all>  Сбросить счётчики трафика"
+    echo -e "    ${DIM}Подсказка: add/remove поддерживают флаг --no-restart для скриптов${NC}"
+    echo ""
+    echo -e "  ${BOLD}Маршрутизация через апстримы:${NC}"
+    echo -e "    ${GREEN}upstream list${NC}                  Показать апстримы"
+    echo -e "    ${GREEN}upstream add${NC} <name> <type> <host:port> [user] [pass] [weight] [iface]"
+    echo -e "    ${GREEN}upstream remove${NC} <name>      Удалить апстрим"
+    echo -e "    ${GREEN}upstream enable${NC} <name>      Включить апстрим"
+    echo -e "    ${GREEN}upstream disable${NC} <name>     Выключить апстрим"
+    echo -e "    ${GREEN}upstream test${NC} <name>        Проверить доступность"
+    echo ""
+    echo -e "  ${BOLD}Конфигурация:${NC}"
+    echo -e "    ${GREEN}port${NC} [get|<number>]       Показать или изменить порт прокси"
+    echo -e "    ${GREEN}ip${NC} [get|auto|<address>]   Показать, сбросить или задать свой IP/домен для ссылок"
+    echo -e "    ${GREEN}domain${NC} [get|clear|<host>] Показать, очистить или изменить домен FakeTLS"
+    echo -e "    ${GREEN}adtag${NC} [set <hex>|remove|view] Управление ad-tag"
+    echo -e "    ${GREEN}geoblock${NC} [add|remove|list|clear] Управление геоблокировкой"
+    echo ""
+    echo -e "  ${BOLD}Мониторинг:${NC}"
+    echo -e "    ${GREEN}traffic${NC}                 Показать статистику трафика"
+    echo -e "    ${GREEN}metrics${NC}                 Показать живые метрики движка (соединения, апстрим, пользователи, ME)"
+    echo -e "    ${GREEN}metrics live${NC} [seconds]  Автообновление панели метрик (по умолчанию: 5с)"
+    echo -e "    ${GREEN}logs${NC}                    Показать логи контейнера"
+    echo -e "    ${GREEN}health${NC}                  Запустить диагностику"
+    echo ""
+    echo -e "  ${BOLD}Telegram:${NC}"
+    echo -e "    ${GREEN}telegram setup${NC}          Запустить мастер Telegram-бота"
+    echo -e "    ${GREEN}telegram status${NC}         Показать статус Telegram-бота"
+    echo -e "    ${GREEN}telegram test${NC}           Отправить тестовое сообщение"
+    echo -e "    ${GREEN}telegram disable${NC}        Отключить Telegram"
+    echo -e "    ${GREEN}telegram remove${NC}         Удалить Telegram-бота"
+    echo ""
+    echo -e "  ${BOLD}Информация и справка:${NC}"
+    echo -e "    ${GREEN}info${NC}                    Открыть справку по функциям"
+    echo -e "    ${GREEN}firewall${NC}                Показать руководство по firewall"
+    echo -e "    ${GREEN}portforward${NC}             Показать руководство по пробросу порта"
+    echo ""
+    echo -e "  ${BOLD}Движок:${NC}"
+    echo -e "    ${GREEN}engine status${NC}           Показать текущую версию движка"
+    echo -e "    ${GREEN}engine rebuild${NC}          Принудительно пересобрать образ движка"
+    echo -e "    ${GREEN}rebuild${NC}                 Принудительно пересобрать из исходников"
+    echo ""
+    echo -e "  ${BOLD}Система:${NC}"
+    echo -e "    ${GREEN}install${NC}                 Запустить мастер установки"
+    echo -e "    ${GREEN}menu${NC}                    Открыть интерактивное меню"
+    echo -e "    ${GREEN}update${NC}                  Проверить обновления"
+    echo -e "    ${GREEN}uninstall${NC}               Удалить MTProxyMax"
+    echo -e "    ${GREEN}version${NC}                 Показать версию"
+    echo -e "    ${GREEN}help${NC}                    Показать эту справку"
+    echo ""
+}
+
+_json_escape() {
+    local s="$1"
+    s="${s//\\/\\\\}"    # backslash
+    s="${s//\"/\\\"}"    # double quote
+    s="${s//$'\n'/\\n}"  # newline
+    s="${s//$'\t'/\\t}"  # tab
+    printf '%s' "$s"
+}
+
+show_status_json() {
+    local status="stopped" uptime_secs=0 traffic_in=0 traffic_out=0 connections=0
+    if is_proxy_running; then
+        status="running"
+        uptime_secs=$(get_proxy_uptime 2>/dev/null) || uptime_secs=0
+        read -r traffic_in traffic_out connections <<< "$(get_cumulative_proxy_stats)"
+    fi
+
+    _load_all_cumulative_user_stats 2>/dev/null
+
+    local engine_ver
+    engine_ver=$(get_telemt_version 2>/dev/null) || engine_ver="unknown"
+
+    # Build JSON
+    printf '{\n'
+    printf '  "version": "%s",\n' "$VERSION"
+    printf '  "engine_version": "%s",\n' "$engine_ver"
+    printf '  "status": "%s",\n' "$status"
+    printf '  "port": %d,\n' "$PROXY_PORT"
+    printf '  "domain": "%s",\n' "$PROXY_DOMAIN"
+    printf '  "uptime_seconds": %d,\n' "$uptime_secs"
+    printf '  "connections": %d,\n' "${connections:-0}"
+    printf '  "traffic_in": %d,\n' "${traffic_in:-0}"
+    printf '  "traffic_out": %d,\n' "${traffic_out:-0}"
+    printf '  "secrets": [\n'
+
+    local i first=true
+    for i in "${!SECRETS_LABELS[@]}"; do
+        local label="${SECRETS_LABELS[$i]}"
+        [ "$first" = "true" ] && first=false || printf ',\n'
+        local u_in=${_batch_cum_in["$label"]:-0}
+        local u_out=${_batch_cum_out["$label"]:-0}
+        local u_conns=${_batch_cum_conns["$label"]:-0}
+        printf '    {\n'
+        printf '      "label": "%s",\n' "$label"
+        printf '      "enabled": %s,\n' "${SECRETS_ENABLED[$i]}"
+        printf '      "traffic_in": %d,\n' "$u_in"
+        printf '      "traffic_out": %d,\n' "$u_out"
+        printf '      "connections": %d,\n' "$u_conns"
+        printf '      "quota": %d,\n' "${SECRETS_QUOTA[$i]:-0}"
+        printf '      "expires": "%s",\n' "${SECRETS_EXPIRES[$i]:-0}"
+        printf '      "notes": "%s"\n' "$(_json_escape "${SECRETS_NOTES[$i]:-}")"
+        printf '    }'
+    done
+    printf '\n  ]\n'
+    printf '}\n'
+}
+
+show_metrics() {
+    local m
+    if ! m=$(_fetch_metrics 2>/dev/null); then
+        log_error "Metrics endpoint unavailable — is the proxy running?"
+        return 1
+    fi
+
+    # Single awk pass: S| = scalars, D| = duration buckets, U| = per-user
+    local parsed
+    parsed=$(echo "$m" | awk '
+        function lbl(s, k,    p, q) {
+            p = index(s, k "=\""); if (!p) return ""
+            s = substr(s, p + length(k) + 2)
+            q = index(s, "\""); return q ? substr(s, 1, q-1) : ""
+        }
+        /^telemt_uptime_seconds /                           { uptime = $NF }
+        /^telemt_connections_total /                        { c_tot  = $NF }
+        /^telemt_connections_bad_total /                    { c_bad  = $NF }
+        /^telemt_connections_current /                      { c_cur  = $NF }
+        /^telemt_connections_me_current /                   { c_me   = $NF }
+        /^telemt_connections_direct_current /               { c_dir  = $NF }
+        /^telemt_upstream_connect_attempt_total /           { up_att = $NF }
+        /^telemt_upstream_connect_success_total /           { up_ok  = $NF }
+        /^telemt_upstream_connect_fail_total /              { up_fail= $NF }
+        /^telemt_me_reconnect_attempts_total /              { me_att = $NF }
+        /^telemt_me_reconnect_success_total /               { me_ok  = $NF }
+        /^telemt_me_writers_active_current /                { me_wa  = $NF }
+        /^telemt_me_writers_warm_current /                  { me_ww  = $NF }
+        /^telemt_me_endpoint_quarantine_total /             { me_quar= $NF }
+        /^telemt_me_crc_mismatch_total /                    { me_crc = $NF }
+        /^telemt_pool_drain_active /                        { pool   = $NF }
+        /^telemt_desync_total /                             { desync = $NF }
+        /^telemt_secure_padding_invalid_total /             { padinv = $NF }
+        /^telemt_upstream_connect_duration_success_total\{/ { b=lbl($0,"bucket"); if(b) ds[b]+=$NF }
+        /^telemt_upstream_connect_duration_fail_total\{/    { b=lbl($0,"bucket"); if(b) df[b]+=$NF }
+        /^telemt_user_connections_current\{/ { u=lbl($0,"user"); if(u) uc[u]+=$NF }
+        /^telemt_user_connections_total\{/   { u=lbl($0,"user"); if(u) ut[u]+=$NF }
+        /^telemt_user_octets_from_client\{/  { u=lbl($0,"user"); if(u) rx[u]+=$NF }
+        /^telemt_user_octets_to_client\{/    { u=lbl($0,"user"); if(u) tx[u]+=$NF }
+        /^telemt_user_unique_ips_current\{/  { u=lbl($0,"user"); if(u) ui[u]+=$NF }
+        END {
+            printf "S|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f|%.0f\n",
+                uptime+0,c_tot+0,c_bad+0,c_cur+0,c_me+0,c_dir+0,
+                up_att+0,up_ok+0,up_fail+0,me_att+0,me_ok+0,
+                me_wa+0,me_ww+0,me_quar+0,me_crc+0,pool+0,desync+0,padinv+0
+            bkeys[1]="le_100ms";   bnames[1]="<=100ms"
+            bkeys[2]="101_500ms";  bnames[2]="101-500ms"
+            bkeys[3]="501_1000ms"; bnames[3]="501ms-1s"
+            bkeys[4]="gt_1000ms";  bnames[4]=">1s"
+            for (i=1;i<=4;i++) {
+                b=bkeys[i]; ok=ds[b]+0; fail=df[b]+0; tot=ok+fail
+                printf "D|%s|%s|%.0f|%.0f|%.1f\n", b, bnames[i], ok, fail, (tot>0 ? ok/tot*100 : -1)
+            }
+            for (u in uc) users[u]=1
+            for (u in rx) users[u]=1
+            for (u in tx) users[u]=1
+            for (u in ui) users[u]=1
+            for (u in users)
+                printf "U|%s|%.0f|%.0f|%.0f|%.0f|%.0f\n", u, uc[u]+0, ut[u]+0, rx[u]+0, tx[u]+0, ui[u]+0
+        }
+    ')
+
+    # Parse scalar line
+    local uptime c_tot c_bad c_cur c_me c_dir up_att up_ok up_fail me_att me_ok me_wa me_ww me_quar me_crc pool desync padinv
+    IFS='|' read -r _ uptime c_tot c_bad c_cur c_me c_dir up_att up_ok up_fail \
+                       me_att me_ok me_wa me_ww me_quar me_crc pool desync padinv \
+        <<< "$(echo "$parsed" | grep '^S|')"
+
+    local c_good=$(( ${c_tot:-0} - ${c_bad:-0} ))
+    local up_rate=0 me_rate=0
+    [ "${up_att:-0}" -gt 0 ] && up_rate=$(awk -v a="$up_att" -v b="$up_ok" 'BEGIN{printf "%.1f", b/a*100}')
+    [ "${me_att:-0}" -gt 0 ] && me_rate=$(awk -v a="$me_att" -v b="$me_ok" 'BEGIN{printf "%.1f", b/a*100}')
+
+    local up_status
+    if   [ "${up_att:-0}" -eq 0 ]; then
+        up_status="${DIM}—${NC}"
+    elif awk -v r="$up_rate" 'BEGIN{exit !(r+0 >= 95)}'; then
+        up_status="${BRIGHT_GREEN}OK${NC} ${up_rate}%"
+    elif awk -v r="$up_rate" 'BEGIN{exit !(r+0 >= 80)}'; then
+        up_status="${YELLOW}WARN${NC} ${up_rate}%"
+    else
+        up_status="${BRIGHT_RED}CRIT${NC} ${up_rate}%"
+    fi
+
+    local me_rate_disp
+    [ "${me_att:-0}" -gt 0 ] && me_rate_disp="${me_rate}%" || me_rate_disp="—"
+
+    draw_header "METRICS"
+    echo -e "  ${DIM}uptime:${NC} $(format_duration "${uptime:-0}")   ${DIM}upstream:${NC} ${up_status}   ${DIM}active:${NC} ${c_cur:-0}   ${DIM}writers:${NC} ${me_wa:-0}/${me_ww:-0}"
+    echo ""
+
+    echo -e "  ${BOLD}Connections${NC}"
+    echo -e "  ${DIM}total:${NC} ${c_tot:-0}   ${DIM}authorized:${NC} ${BRIGHT_GREEN}${c_good}${NC}   ${DIM}rejected:${NC} ${BRIGHT_RED}${c_bad:-0}${NC}"
+    echo -e "  ${DIM}active:${NC} ${c_cur:-0}  (ME: ${c_me:-0}  direct: ${c_dir:-0})"
+    echo ""
+
+    echo -e "  ${BOLD}Upstream${NC}"
+    echo -e "  ${DIM}attempts:${NC} ${up_att:-0}   ${DIM}success:${NC} ${BRIGHT_GREEN}${up_ok:-0}${NC}   ${DIM}failed:${NC} ${BRIGHT_RED}${up_fail:-0}${NC}   ${DIM}rate:${NC} ${up_status}"
+    while IFS='|' read -r _ bk bn ok fail pct; do
+        local ppct
+        ppct=$(awk -v p="$pct" 'BEGIN{if(p+0<0) print "—"; else printf "%.0f%%", p}')
+        printf "    %-12s  %6s ok  %6s fail  (%s)\n" "$bn" "$ok" "$fail" "$ppct"
+    done < <(echo "$parsed" | grep '^D|')
+    echo ""
+
+    local user_lines
+    user_lines=$(echo "$parsed" | grep '^U|' | sort -t'|' -k3 -rn)
+    if [ -n "$user_lines" ]; then
+        echo -e "  ${BOLD}Users${NC}"
+        while IFS='|' read -r _ uname ucur utot urx utx uips; do
+            echo -e "  ${GREEN}${SYM_OK}${NC} ${BOLD}${uname}${NC}  active: ${ucur}  total: ${utot}  ${SYM_DOWN} $(format_bytes "$urx")  ${SYM_UP} $(format_bytes "$utx")  IPs: ${uips}"
+        done <<< "$user_lines"
+        echo ""
+    fi
+
+    echo -e "  ${BOLD}ME Health${NC}"
+    echo -e "  ${DIM}reconnects:${NC} ${me_ok:-0}/${me_att:-0} (${me_rate_disp})   ${DIM}writers:${NC} ${me_wa:-0} active / ${me_ww:-0} warm"
+    [ "${me_quar:-0}" -gt 0 ] && echo -e "  ${DIM}quarantined endpoints:${NC} ${YELLOW}${me_quar}${NC}"
+    [ "${me_crc:-0}"  -gt 0 ] && echo -e "  ${DIM}CRC mismatches:${NC}       ${YELLOW}${me_crc}${NC}"
+    [ "${pool:-0}"    -gt 0 ] && echo -e "  ${DIM}writers draining:${NC}     ${pool}"
+    echo ""
+
+    if [ "${desync:-0}" -gt 0 ] || [ "${padinv:-0}" -gt 0 ]; then
+        echo -e "  ${BOLD}Security${NC}"
+        [ "${desync:-0}"  -gt 0 ] && echo -e "  ${DIM}desync events:${NC}   ${YELLOW}${desync}${NC}"
+        [ "${padinv:-0}"  -gt 0 ] && echo -e "  ${DIM}invalid padding:${NC} ${YELLOW}${padinv}${NC}"
+        echo ""
+    fi
+}
+
+show_status() {
+    echo ""
+    local w=$TERM_WIDTH
+
+    draw_box_top "$w"
+    draw_box_center "${BRIGHT_CYAN}${BOLD}M T P R O X Y M A X${NC}" "$w"
+    draw_box_sep "$w"
+
+    # Status info
+    local status_str uptime_str traffic_in traffic_out connections
+    if is_proxy_running; then
+        status_str=$(draw_status running)
+        local up_secs
+        up_secs=$(get_proxy_uptime)
+        uptime_str=$(format_duration "$up_secs")
+
+        read -r traffic_in traffic_out connections <<< "$(get_cumulative_proxy_stats)"
+    else
+        status_str=$(draw_status stopped)
+        uptime_str="—"
+        traffic_in=0
+        traffic_out=0
+        connections=0
+    fi
+
+    draw_box_line "  ${BOLD}Движок:${NC} telemt v$(get_telemt_version)  ${BOLD}Status:${NC} ${status_str}" "$w"
+    draw_box_line "  ${BOLD}Port:${NC}   ${PROXY_PORT}            ${BOLD}Uptime:${NC} ${uptime_str}" "$w"
+    draw_box_line "  ${BOLD}Domain:${NC} ${PROXY_DOMAIN}" "$w"
+    draw_box_line "  ${BOLD}Traffic:${NC} ${SYM_DOWN} $(format_bytes "$traffic_in")  ${SYM_UP} $(format_bytes "$traffic_out")" "$w"
+    draw_box_line "  ${BOLD}Connections:${NC} ${connections}" "$w"
+
+    # Count secrets
+    local active=0 disabled=0
+    local i
+    for i in "${!SECRETS_ENABLED[@]}"; do
+        [ "${SECRETS_ENABLED[$i]}" = "true" ] && active=$((active+1)) || disabled=$((disabled+1))
+    done
+    draw_box_line "  ${BOLD}Secrets:${NC} ${active} active / ${disabled} disabled" "$w"
+
+    draw_box_bottom "$w"
+    echo ""
+}
+
+cli_main() {
+    local cmd="${1:-}"
+    shift 2>/dev/null || true
+
+    case "$cmd" in
+        # No args = menu or installer (disable errexit for interactive TUI)
+        "")
+            set +eo pipefail
+            if [ -f "$SETTINGS_FILE" ]; then
+                load_settings
+                load_secrets
+                check_update_sha_bg   # non-blocking background SHA check
+                show_main_menu
+            else
+                run_installer
+            fi
+            ;;
+
+        start)
+            check_root
+            load_settings
+            load_secrets
+            start_proxy_container
+            ;;
+        stop)
+            check_root
+            load_settings
+            stop_proxy_container
+            ;;
+        restart)
+            check_root
+            load_settings
+            load_secrets
+            restart_proxy_container
+            ;;
+        status)
+            load_settings
+            load_secrets
+            if [ "$1" = "--json" ]; then
+                show_status_json
+            else
+                show_status
+            fi
+            ;;
+
+        secret)
+            load_settings
+            load_secrets
+            local subcmd="${1:-list}"
+            shift 2>/dev/null || true
+            case "$subcmd" in
+                add)
+                    check_root
+                    local _no_restart="false"
+                    [[ "${*}" == *"--no-restart"* ]] && _no_restart="true"
+                    local _args=()
+                    for _a in "$@"; do [[ "$_a" != "--no-restart" ]] && _args+=("$_a"); done
+                    secret_add "${_args[0]:-}" "${_args[1]:-}" "$_no_restart"
+                    ;;
+                add-batch)
+                    check_root
+                    local _no_restart="false" _args=()
+                    for _a in "$@"; do [[ "$_a" == "--no-restart" ]] && _no_restart="true" || _args+=("$_a"); done
+                    secret_add_batch "$_no_restart" "${_args[@]}"
+                    ;;
+                remove)
+                    check_root
+                    local _no_restart="false"
+                    [[ "${*}" == *"--no-restart"* ]] && _no_restart="true"
+                    local _args=()
+                    for _a in "$@"; do [[ "$_a" != "--no-restart" ]] && _args+=("$_a"); done
+                    secret_remove "${_args[0]:-}" "false" "$_no_restart"
+                    ;;
+                remove-batch)
+                    check_root
+                    local _no_restart="false" _args=()
+                    for _a in "$@"; do [[ "$_a" == "--no-restart" ]] && _no_restart="true" || _args+=("$_a"); done
+                    secret_remove_batch "false" "$_no_restart" "${_args[@]}"
+                    ;;
+                list)    secret_list ;;
+                rotate)  check_root; secret_rotate "$1" ;;
+                link)    get_proxy_link_https "${1:-}"; echo "" ;;
+                qr)      local link; link=$(get_proxy_link_https "${1:-}") && show_qr "$link" ;;
+                enable)  check_root; secret_toggle "$1" enable ;;
+                disable) check_root; secret_toggle "$1" disable ;;
+                limits)  secret_show_limits "$1" ;;
+                setlimit)
+                    check_root
+                    local _no_restart="false"
+                    local _args=()
+                    for _a in "$@"; do
+                        if [ "$_a" = "--no-restart" ]; then _no_restart="true"
+                        else _args+=("$_a"); fi
+                    done
+                    set -- "${_args[@]}"
+                    local label="$1"; shift 2>/dev/null || true
+                    local field="$1"; shift 2>/dev/null || true
+                    local value="$1"
+                    if [ -z "$label" ] || [ -z "$field" ] || [ -z "$value" ]; then
+                        log_error "Usage: mtproxymax secret setlimit <label> conns|ips|quota|expires <value> [--no-restart]"
+                        return 1
+                    fi
+                    case "$field" in
+                        conns)   secret_set_limits "$label" "$value" "" "" "" "$_no_restart" ;;
+                        ips)     secret_set_limits "$label" "" "$value" "" "" "$_no_restart" ;;
+                        quota)   secret_set_limits "$label" "" "" "$value" "" "$_no_restart" ;;
+                        expires) secret_set_limits "$label" "" "" "" "$value" "$_no_restart" ;;
+                        *) log_error "Usage: mtproxymax secret setlimit <label> conns|ips|quota|expires <value> [--no-restart]"; return 1 ;;
+                    esac
+                    ;;
+                setlimits)
+                    check_root
+                    local _no_restart="false"
+                    local _args=()
+                    for _a in "$@"; do
+                        if [ "$_a" = "--no-restart" ]; then _no_restart="true"
+                        else _args+=("$_a"); fi
+                    done
+                    set -- "${_args[@]}"
+                    local label="$1"; shift 2>/dev/null || true
+                    local sl_conns="${1:-0}"; shift 2>/dev/null || true
+                    local sl_ips="${1:-0}"; shift 2>/dev/null || true
+                    local sl_quota="${1:-0}"; shift 2>/dev/null || true
+                    local sl_exp="${1:-}"
+                    [ -z "$label" ] && { log_error "Usage: mtproxymax secret setlimits <label> <conns> <ips> <quota> [expires] [--no-restart]"; return 1; }
+                    secret_set_limits "$label" "$sl_conns" "$sl_ips" "$sl_quota" "$sl_exp" "$_no_restart"
+                    ;;
+                reenable)
+                    check_root
+                    [ -z "$1" ] && { log_error "Usage: mtproxymax secret reenable <label>"; return 1; }
+                    secret_reenable "$1"
+                    ;;
+                reset-traffic)
+                    check_root
+                    [ -z "$1" ] && { log_error "Использование: mtproxymax secret reset-traffic <метка|all>"; return 1; }
+                    secret_reset_traffic "$1"
+                    ;;
+                note)
+                    local label="$1"; shift 2>/dev/null || true
+                    local note_text="$*"
+                    [ -z "$label" ] && { log_error "Usage: mtproxymax secret note <label> [text]"; return 1; }
+                    secret_edit_note "$label" "$note_text"
+                    ;;
+                *)       log_error "Unknown: secret ${subcmd}"; show_cli_help; return 1 ;;
+            esac
+            ;;
+
+        kaskad)
+            load_settings
+            local subcmd="${1:-menu}"
+            shift 2>/dev/null || true
+            case "$subcmd" in
+                add)    check_root; kaskad_add_rule_cli "$1" "$2" ;;
+                remove) check_root; kaskad_remove_rule_cli "$1" ;;
+                list)   kaskad_list_rules_cli ;;
+                flush)  check_root; kaskad_flush_rules_cli ;;
+                menu|"") show_kaskad_menu ;;
+                *)      log_error "Неизвестная команда: kaskad ${subcmd}"; show_cli_help; return 1 ;;
+            esac
+            ;;
+
+        upstream)
+            load_settings
+            load_secrets
+            local subcmd="${1:-list}"
+            shift 2>/dev/null || true
+            case "$subcmd" in
+                list)    upstream_list ;;
+                add)
+                    check_root
+                    local name="$1" type="$2" addr="${3:-}" user="${4:-}" pass="${5:-}" weight="${6:-10}" iface="${7:-}"
+                    upstream_add "$name" "$type" "$addr" "$user" "$pass" "$weight" "$iface"
+                    ;;
+                remove)  check_root; upstream_remove "$1" ;;
+                enable)  check_root; upstream_toggle "$1" enable ;;
+                disable) check_root; upstream_toggle "$1" disable ;;
+                test)    upstream_test "$1" ;;
+                *)       log_error "Unknown: upstream ${subcmd}"; show_cli_help; return 1 ;;
+            esac
+            ;;
+
+        port)
+            load_settings
+            local new_port="$1"
+            if [ -z "$new_port" ] || [ "$new_port" = "get" ]; then
+                echo "$PROXY_PORT"
+                return 0
+            fi
+            check_root
+            if validate_port "$new_port"; then
+                # Remove geoblock rules on old port before changing
+                [ -n "$BLOCKLIST_COUNTRIES" ] && { geoblock_remove_all; _remove_default_drop; }
+                PROXY_PORT="$new_port"
+                save_settings
+                log_success "Порт изменён на ${new_port}"
+                if is_proxy_running; then
+                    load_secrets
+                    restart_proxy_container
+                fi
+            else
+                log_error "Некорректный порт: ${new_port} (должен быть в диапазоне 1-65535)"
+                return 1
+            fi
+            ;;
+
+        ip)
+            load_settings
+            local ip_arg="$1"
+            case "$ip_arg" in
+                ""|get)
+                    if [ -n "${CUSTOM_IP}" ]; then
+                        echo "${CUSTOM_IP} (custom)"
+                    else
+                        echo "$(get_public_ip) (auto-detected)"
+                    fi
+                    return 0
+                    ;;
+                auto|clear)
+                    check_root
+                    CUSTOM_IP=""
+                    save_settings
+                    log_success "IP сброшен на автоопределение ($(CUSTOM_IP="" get_public_ip))"
+                    ;;
+                *)
+                    check_root
+                    if [[ "$ip_arg" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$ip_arg" =~ ^[0-9a-fA-F:]+$ ]] || [[ "$ip_arg" =~ ^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$ ]]; then
+                        CUSTOM_IP="$ip_arg"
+                        save_settings
+                        log_success "IP/домен установлен: ${ip_arg}"
+                    else
+                        log_error "Некорректный IP-адрес или домен: ${ip_arg}"
+                        return 1
+                    fi
+                    ;;
+            esac
+            ;;
+
+        domain)
+            load_settings
+            local new_domain="$1"
+            case "$new_domain" in
+                ""|get)
+                    echo "${PROXY_DOMAIN:-<not set>}"
+                    return 0
+                    ;;
+                clear)
+                    check_root
+                    PROXY_DOMAIN=""
+                    save_settings
+                    log_success "Domain cleared"
+                    if is_proxy_running; then
+                        load_secrets
+                        restart_proxy_container
+                    fi
+                    ;;
+                *)
+                    check_root
+                    if validate_domain "$new_domain"; then
+                        PROXY_DOMAIN="$new_domain"
+                        save_settings
+                        log_success "Domain changed to ${new_domain}"
+                        if is_proxy_running; then
+                            load_secrets
+                            restart_proxy_container
+                        fi
+                    else
+                        log_error "Invalid domain format (use valid hostname like cloudflare.com)"
+                        return 1
+                    fi
+                    ;;
+            esac
+            ;;
+
+        adtag)
+            load_settings
+            case "$1" in
+                set)
+                    check_root
+                    if [[ "$2" =~ ^[0-9a-fA-F]{32}$ ]]; then
+                        AD_TAG="$2"
+                        save_settings
+                        log_success "Ad-tag set"
+                        load_secrets; reload_proxy_config
+                    else
+                        log_error "Ad-tag must be 32 hex characters"
+                        return 1
+                    fi
+                    ;;
+                remove)
+                    check_root
+                    AD_TAG=""
+                    save_settings
+                    log_success "Ad-tag removed"
+                    load_secrets; reload_proxy_config
+                    ;;
+                view|"")
+                    if [ -n "$AD_TAG" ]; then
+                        echo -e "  ${BOLD}Ad-tag:${NC} ${AD_TAG}"
+                    else
+                        echo -e "  ${DIM}No ad-tag configured${NC}"
+                        echo -e "  ${DIM}Get one from @MTProxyBot on Telegram${NC}"
+                    fi
+                    ;;
+                *)
+                    log_error "Unknown: adtag $1"; show_cli_help; return 1
+                    ;;
+            esac
+            ;;
+
+        geoblock)
+            load_settings
+            case "$1" in
+                add)
+                    check_root
+                    local code=$(echo "$2" | tr '[:upper:]' '[:lower:]')
+                    if [[ "$code" =~ ^[a-z]{2}$ ]]; then
+                        if echo ",$BLOCKLIST_COUNTRIES," | grep -q ",${code},"; then
+                            log_info "Country '${code^^}' is already blocked"
+                        else
+                            _ensure_ipset && _download_country_cidrs "$code" && {
+                                [ -z "$BLOCKLIST_COUNTRIES" ] && BLOCKLIST_COUNTRIES="$code" || BLOCKLIST_COUNTRIES="${BLOCKLIST_COUNTRIES},${code}"
+                                save_settings
+                                _apply_country_rules "$code"
+                                _ensure_default_drop
+                            }
+                        fi
+                    else
+                        log_error "Invalid country code (use 2-letter ISO code, e.g. us, de, ir)"
+                    fi
+                    ;;
+                remove)
+                    check_root
+                    local code=$(echo "$2" | tr '[:upper:]' '[:lower:]')
+                    if [[ "$code" =~ ^[a-z]{2}$ ]]; then
+                        if echo ",$BLOCKLIST_COUNTRIES," | grep -q ",${code},"; then
+                            BLOCKLIST_COUNTRIES=$(echo ",$BLOCKLIST_COUNTRIES," | sed "s/,${code},/,/g;s/^,//;s/,$//")
+                            save_settings
+                            _remove_country_rules "$code"
+                            rm -f "${GEOBLOCK_CACHE_DIR}/${code}.zone"
+                            [ -z "$BLOCKLIST_COUNTRIES" ] && _remove_default_drop
+                            log_success "Removed ${code^^} — rules and cache cleared"
+                        else
+                            log_info "Country '${code^^}' is not blocked"
+                        fi
+                    else
+                        log_error "Invalid country code (use 2-letter ISO code)"
+                    fi
+                    ;;
+                clear)
+                    check_root
+                    local code
+                    IFS=',' read -ra codes <<< "$BLOCKLIST_COUNTRIES"
+                    for code in "${codes[@]}"; do
+                        [ -z "$code" ] && continue
+                        _remove_country_rules "$code"
+                        rm -f "${GEOBLOCK_CACHE_DIR}/${code}.zone"
+                    done
+                    _remove_default_drop
+                    BLOCKLIST_COUNTRIES=""
+                    save_settings
+                    log_success "All geo-blocks cleared"
+                    ;;
+                list|"")
+                    echo -e "  ${BOLD}Blocked countries:${NC} ${BLOCKLIST_COUNTRIES:-${DIM}none${NC}}"
+                    ;;
+                *)
+                    log_error "Unknown: geoblock $1"; show_cli_help; return 1
+                    ;;
+            esac
+            ;;
+
+        traffic)
+            load_settings
+            load_secrets
+            echo ""
+            draw_header "TRAFFIC"
+            local t_in t_out conns
+            read -r t_in t_out conns <<< "$(get_cumulative_proxy_stats)"
+            # Batch-load all user stats
+            _load_all_cumulative_user_stats 2>/dev/null
+            echo ""
+            echo -e "  ${BOLD}Total:${NC} ${SYM_DOWN} $(format_bytes "$t_in")  ${SYM_UP} $(format_bytes "$t_out")  ${BOLD}Connections:${NC} ${conns}"
+            echo ""
+
+            # Per-user breakdown
+            for i in "${!SECRETS_LABELS[@]}"; do
+                [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+                local label="${SECRETS_LABELS[$i]}"
+                local u_in=${_batch_cum_in["$label"]:-0}
+                local u_out=${_batch_cum_out["$label"]:-0}
+                local u_conns=${_batch_cum_conns["$label"]:-0}
+                echo -e "  ${GREEN}${SYM_OK}${NC} ${BOLD}${label}${NC}: ${SYM_DOWN} $(format_bytes "$u_in")  ${SYM_UP} $(format_bytes "$u_out")  conns: ${u_conns}"
+            done
+            echo ""
+            ;;
+
+        metrics)
+            load_settings
+            local subcmd="${1:-}"
+            if [ "$subcmd" = "live" ]; then
+                local interval="${2:-5}"
+                [[ "$interval" =~ ^[0-9]+$ ]] && [ "$interval" -ge 1 ] || interval=5
+                (
+                    while true; do
+                        tput clear 2>/dev/null || printf '\033[2J\033[H'
+                        show_metrics
+                        echo -e "  ${DIM}[live — refreshing every ${interval}s, Ctrl+C to stop]${NC}"
+                        sleep "$interval"
+                    done
+                )
+                echo ""
+            else
+                show_metrics
+            fi
+            ;;
+
+        logs)
+            load_settings
+            echo -e "  ${DIM}Streaming logs (Ctrl+C to stop)...${NC}"
+            docker logs -f --tail 50 "$CONTAINER_NAME" 2>&1
+            ;;
+
+        instance)
+            load_settings
+            load_secrets
+            load_instances
+            local subcmd="${1:-list}"; shift 2>/dev/null || true
+            case "$subcmd" in
+                add)
+                    check_root
+                    [ -z "$1" ] && { log_error "Usage: mtproxymax instance add <port> [label]"; return 1; }
+                    instance_add "$1" "$2"
+                    ;;
+                remove)
+                    check_root
+                    [ -z "$1" ] && { log_error "Usage: mtproxymax instance remove <port>"; return 1; }
+                    instance_remove "$1"
+                    ;;
+                list|"")
+                    instance_list
+                    ;;
+                *) log_error "Unknown: instance ${subcmd}"; return 1 ;;
+            esac
+            ;;
+
+        backup)
+            check_root
+            load_settings
+            create_backup
+            ;;
+
+        restore)
+            check_root
+            load_settings
+            restore_backup "$1"
+            ;;
+
+        backups)
+            load_settings
+            list_backups
+            ;;
+
+        connlog)
+            load_settings
+            if [ "$1" = "clear" ]; then
+                check_root
+                > "$CONNECTION_LOG" 2>/dev/null
+                log_success "Connection log cleared"
+            elif [ -f "$CONNECTION_LOG" ] && [ -s "$CONNECTION_LOG" ]; then
+                echo ""
+                draw_header "CONNECTION LOG"
+                echo ""
+                tail -n "${1:-50}" "$CONNECTION_LOG"
+                echo ""
+            else
+                log_info "Connection log is empty"
+            fi
+            ;;
+
+        health)
+            load_settings
+            load_secrets
+            health_check
+            ;;
+
+        telegram)
+            load_settings
+            load_secrets
+            case "${1:-status}" in
+                setup)   check_root; telegram_setup_wizard ;;
+                test)    telegram_test_message ;;
+                status|"")
+                    if [ "$TELEGRAM_ENABLED" = "true" ]; then
+                        echo -e "  ${BOLD}Telegram:${NC} $(draw_status running 'Enabled')"
+                        echo -e "  ${DIM}Interval: every ${TELEGRAM_INTERVAL}h | Alerts: ${TELEGRAM_ALERTS_ENABLED}${NC}"
+                    else
+                        echo -e "  ${BOLD}Telegram:${NC} $(draw_status disabled 'Disabled')"
+                    fi
+                    ;;
+                disable)
+                    check_root
+                    TELEGRAM_ENABLED="false"
+                    save_settings
+                    systemctl stop mtproxymax-telegram.service 2>/dev/null
+                    log_success "Telegram disabled"
+                    ;;
+                remove)
+                    check_root
+                    TELEGRAM_ENABLED="false"
+                    TELEGRAM_BOT_TOKEN=""
+                    TELEGRAM_CHAT_ID=""
+                    save_settings
+                    systemctl stop mtproxymax-telegram.service 2>/dev/null
+                    systemctl disable mtproxymax-telegram.service 2>/dev/null
+                    log_success "Telegram bot removed"
+                    ;;
+                *) log_error "Usage: mtproxymax telegram [setup|test|status|disable|remove]"; return 1 ;;
+            esac
+            ;;
+
+        info)
+            load_settings
+            show_info_menu
+            ;;
+
+        firewall)
+            load_settings
+            show_firewall_guide
+            ;;
+
+        portforward)
+            load_settings
+            show_port_forward_guide
+            ;;
+
+        update)
+            check_root
+            load_settings
+            self_update
+            ;;
+
+        rebuild)
+            check_root
+            load_settings
+            log_info "Force-rebuilding telemt engine from source (commit ${TELEMT_COMMIT})..."
+            build_telemt_image source
+            if is_proxy_running; then
+                load_secrets
+                restart_proxy_container
+            fi
+            ;;
+
+        engine)
+            load_settings
+            local subcmd="${1:-status}"
+            shift 2>/dev/null || true
+            case "$subcmd" in
+                status)
+                    echo -e "  ${BOLD}Telemt Engine${NC}"
+                    echo -e "  ${DIM}Installed:${NC}  v$(get_telemt_version)"
+                    echo -e "  ${DIM}Pinned to:${NC}  commit ${TELEMT_COMMIT}"
+                    echo ""
+                    local _expected="${TELEMT_MIN_VERSION}-${TELEMT_COMMIT}"
+                    local _current; _current=$(get_telemt_version)
+                    if [ "$_current" = "$_expected" ]; then
+                        log_success "Движок обновлён"
+                    elif _version_gte "$_current" "$_expected"; then
+                        log_success "Движок обновлён (v${_current}, ahead of pinned v${_expected})"
+                    else
+                        log_info "Доступно обновление: v${_current} -> v${_expected}"
+                        echo -e "  ${DIM}Запуск: mtproxymax update${NC}"
+                    fi
+                    ;;
+                rebuild)
+                    check_root
+                    echo -en "  ${DIM}Force rebuild engine from commit ${TELEMT_COMMIT}? [Y/n]:${NC} "
+                    local confirm; read -r confirm
+                    if [[ "$confirm" =~ ^[nN] ]]; then
+                        return 0
+                    fi
+                    build_telemt_image true
+                    if is_proxy_running; then
+                        load_secrets
+                        restart_proxy_container
+                    fi
+                    log_success "Engine rebuilt"
+                    ;;
+                *)
+                    echo -e "  ${BOLD}Usage:${NC} mtproxymax engine <command>"
+                    echo ""
+                    echo -e "  ${DIM}status${NC}     Show current engine version"
+                    echo -e "  ${DIM}rebuild${NC}    Force rebuild engine image"
+                    ;;
+            esac
+            ;;
+
+        uninstall)
+            check_root
+            load_settings
+            load_secrets
+            uninstall
+            ;;
+
+        version)
+            echo -e "  ${BOLD}MTProxyMax${NC} v${VERSION}"
+            echo -e "  ${DIM}Engine: telemt v$(get_telemt_version) (Rust)${NC}"
+            echo -e "  ${DIM}r00t-men GiS ;-)${NC}"
+            ;;
+
+        help|--help|-h)
+            show_cli_help
+            ;;
+
+        install)
+            run_installer
+            ;;
+
+        menu)
+            load_settings
+            load_secrets
+            show_main_menu
+            ;;
+
+        *)
+            log_error "Unknown command: ${cmd}"
+            show_cli_help
+            return 1
+            ;;
+    esac
+}
+
+# ── Section 18: Interactive TUI Menus ───────────────────────
+
+show_security_menu() {
+    while true; do
+        clear_screen
+        draw_header "БЕЗОПАСНОСТЬ И МАРШРУТИЗАЦИЯ"
+        echo ""
+        echo -e "  ${DIM}[1]${NC} Геоблокировка"
+        echo -e "  ${DIM}[2]${NC} Цепочка прокси (upstreams)"
+        echo -e "  ${DIM}[3]${NC} MTProxy Kaskad (nftables)"
+        echo -e "  ${DIM}[0]${NC} Назад"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+        case "$choice" in
+            1) show_geoblock_menu ;;
+            2) show_upstream_menu ;;
+            3) show_kaskad_menu ;;
+            0|"") return ;;
+            *) ;;
+        esac
+    done
+}
+
+show_upstream_menu() {
+    while true; do
+        clear_screen
+        draw_header "PROXY CHAINING"
+
+        load_upstreams
+        upstream_list
+
+        echo -e "  ${DIM}[1]${NC} Add upstream"
+        echo -e "  ${DIM}[2]${NC} Remove upstream"
+        echo -e "  ${DIM}[3]${NC} Enable/disable upstream"
+        echo -e "  ${DIM}[4]${NC} Test upstream connectivity"
+        echo -e "  ${DIM}[0]${NC} Назад"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+        case "$choice" in
+            1)
+                echo ""
+                echo -en "  ${BOLD}Name:${NC} "
+                local name; read -r name
+                [ -z "$name" ] && { press_any_key; continue; }
+
+                echo -e "  ${BOLD}Type:${NC}"
+                echo -e "    ${DIM}[1]${NC} SOCKS5"
+                echo -e "    ${DIM}[2]${NC} SOCKS4"
+                echo -e "    ${DIM}[3]${NC} Direct"
+                local type_choice; read -rp "    > " type_choice
+                local type
+                case "$type_choice" in
+                    1) type="socks5" ;;
+                    2) type="socks4" ;;
+                    3) type="direct" ;;
+                    *) log_error "Invalid type"; press_any_key; continue ;;
+                esac
+
+                local addr="" user="" pass=""
+                if [ "$type" != "direct" ]; then
+                    echo -en "  ${BOLD}Address (host:port):${NC} "
+                    read -r addr
+                    [ -z "$addr" ] && { log_error "Address required"; press_any_key; continue; }
+                    echo -en "  ${BOLD}Username (optional):${NC} "
+                    read -r user
+                    echo -en "  ${BOLD}Password (optional):${NC} "
+                    read -r pass
+                fi
+
+                echo -en "  ${BOLD}Weight (1-100, default 10):${NC} "
+                local weight; read -r weight
+                [ -z "$weight" ] && weight=10
+
+                echo -en "  ${BOLD}Bind to IP (optional, blank=auto):${NC} "
+                local iface; read -r iface
+
+                upstream_add "$name" "$type" "$addr" "$user" "$pass" "$weight" "$iface" || true
+                press_any_key
+                ;;
+            2)
+                echo -en "  ${BOLD}Name to remove:${NC} "
+                local name; read -r name
+                [ -n "$name" ] && { upstream_remove "$name" || true; }
+                press_any_key
+                ;;
+            3)
+                echo -en "  ${BOLD}Name to toggle:${NC} "
+                local name; read -r name
+                [ -n "$name" ] && { upstream_toggle "$name" || true; }
+                press_any_key
+                ;;
+            4)
+                echo -en "  ${BOLD}Name to test:${NC} "
+                local name; read -r name
+                [ -n "$name" ] && { upstream_test "$name" || true; }
+                press_any_key
+                ;;
+            0|"") return ;;
+            *) ;;
+        esac
+    done
+}
+
+show_main_menu() {
+    local _cached_telemt_ver _cached_start_epoch=""
+    _cached_telemt_ver=$(get_telemt_version)
+
+    while true; do
+        clear 2>/dev/null || printf '\033[2J\033[H'
+
+        local w=$TERM_WIDTH
+
+        show_banner
+
+        # Status dashboard — single Docker check
+        draw_box_top "$w"
+
+        local _running=false
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$"; then
+            _running=true
+        fi
+
+        local status_str uptime_str traffic_in traffic_out connections
+        if [ "$_running" = "true" ]; then
+            status_str=$(draw_status running)
+            # Cache docker inspect — skip on subsequent renders unless container restarted
+            if [ -z "$_cached_start_epoch" ]; then
+                local started_at
+                started_at=$(docker inspect --format '{{.State.StartedAt}}' "$CONTAINER_NAME" 2>/dev/null)
+                _cached_start_epoch=$(_iso_to_epoch "$started_at")
+            fi
+            local up_secs=$(( $(date +%s) - _cached_start_epoch ))
+            uptime_str=$(format_duration "$up_secs")
+            # Parse all stats fields in a single read (no awk subprocesses)
+            read -r traffic_in traffic_out connections <<< "$(get_cumulative_proxy_stats)"
+        else
+            status_str=$(draw_status stopped)
+            uptime_str="—"
+            traffic_in=0; traffic_out=0; connections=0
+            _cached_start_epoch=""  # Reset so it re-fetches when container comes back up
+        fi
+
+        local active=0 disabled=0
+        for i in "${!SECRETS_ENABLED[@]}"; do
+            [ "${SECRETS_ENABLED[$i]}" = "true" ] && active=$((active+1)) || disabled=$((disabled+1))
+        done
+
+        draw_box_line "  ${BOLD}Движок:${NC} telemt v${_cached_telemt_ver}  ${BOLD}Status:${NC} ${status_str}" "$w"
+        draw_box_line "  ${BOLD}Port:${NC}   ${PROXY_PORT}            ${BOLD}Uptime:${NC} ${uptime_str}" "$w"
+        draw_box_line "  ${BOLD}Domain:${NC} ${PROXY_DOMAIN}" "$w"
+        draw_box_line "  ${BOLD}Traffic:${NC} ${SYM_DOWN} $(format_bytes "$traffic_in")  ${SYM_UP} $(format_bytes "$traffic_out")  ${BOLD}Conns:${NC} ${connections}" "$w"
+        draw_box_line "  ${BOLD}Secrets:${NC} ${active} active / ${disabled} disabled" "$w"
+
+        draw_box_sep "$w"
+        if [ -f "$_UPDATE_BADGE" ]; then
+            draw_box_line "  ${YELLOW}${BOLD}⬆  Update available — select [9] to update${NC}" "$w"
+            draw_box_sep "$w"
+        fi
+        draw_box_empty "$w"
+        draw_box_line "  ${BRIGHT_CYAN}[1]${NC}  Управление прокси" "$w"
+        draw_box_line "  ${BRIGHT_CYAN}[2]${NC}  Управление секретами" "$w"
+        draw_box_line "  ${BRIGHT_CYAN}[3]${NC}  Ссылки и QR" "$w"
+        draw_box_line "  ${BRIGHT_CYAN}[4]${NC}  Telegram-бот" "$w"
+        draw_box_line "  ${BRIGHT_CYAN}[5]${NC}  Безопасность и маршрутизация" "$w"
+        draw_box_line "  ${BRIGHT_CYAN}[6]${NC}  Настройки" "$w"
+        draw_box_line "  ${BRIGHT_CYAN}[7]${NC}  Логи и трафик" "$w"
+        draw_box_line "  ${BRIGHT_CYAN}[8]${NC}  Справка" "$w"
+        draw_box_line "  ${BRIGHT_CYAN}[9]${NC}  О программе и обновление" "$w"
+        draw_box_empty "$w"
+        draw_box_line "  ${BRIGHT_RED}[u]${NC}  Удалить" "$w"
+        draw_box_line "  ${BRIGHT_CYAN}[0]${NC}  Выход" "$w"
+        draw_box_empty "$w"
+        draw_box_sep "$w"
+        draw_box_center "${DIM}mtproxymax v${VERSION} | r00t-men GiS ;-)${NC}" "$w"
+        draw_box_bottom "$w"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+
+        case "$choice" in
+            1) show_proxy_menu ;;
+            2) show_secrets_menu ;;
+            3) show_links_menu ;;
+            4) show_telegram_menu ;;
+            5) show_security_menu ;;
+            6) show_settings_menu ;;
+            7) show_traffic_menu ;;
+            8) show_info_menu ;;
+            9) show_about ;;
+            u|U) uninstall; exit 0 ;;
+            0|q|Q) echo ""; exit 0 ;;
+            *) ;;
+        esac
+    done
+}
+
+show_proxy_menu() {
+    while true; do
+        clear_screen
+        draw_header "УПРАВЛЕНИЕ ПРОКСИ"
+        echo ""
+        local _pstatus
+        docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTAINER_NAME}$" && _pstatus="running" || _pstatus="stopped"
+        echo -e "  Status: $(draw_status "$_pstatus")"
+        echo ""
+        echo -e "  ${DIM}[1]${NC} Запустить прокси"
+        echo -e "  ${DIM}[2]${NC} Остановить прокси"
+        echo -e "  ${DIM}[3]${NC} Перезапустить прокси"
+        echo -e "  ${DIM}[4]${NC} Просмотреть логи"
+        echo -e "  ${DIM}[5]${NC} Проверка состояния"
+        echo -e "  ${DIM}[0]${NC} Назад"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+        case "$choice" in
+            1) start_proxy_container || true; press_any_key ;;
+            2) stop_proxy_container || true; press_any_key ;;
+            3) restart_proxy_container || true; press_any_key ;;
+            4) echo -e "  ${DIM}Нажмите Ctrl+C для остановки...${NC}"; docker logs -f --tail 30 "$CONTAINER_NAME" 2>&1 || true; press_any_key ;;
+            5) health_check || true; press_any_key ;;
+            0|"") return ;;
+            *) ;;
+        esac
+    done
+}
+
+show_secrets_menu() {
+    while true; do
+        clear_screen
+        draw_header "УПРАВЛЕНИЕ СЕКРЕТАМИ"
+
+        secret_list
+
+        echo -e "  ${DIM}[1]${NC} Add new secret"
+        echo -e "  ${DIM}[2]${NC} Remove a secret"
+        echo -e "  ${DIM}[3]${NC} Rotate a secret"
+        echo -e "  ${DIM}[4]${NC} Enable/disable a secret"
+        echo -e "  ${DIM}[5]${NC} Set user limits"
+        echo -e "  ${DIM}[6]${NC} Batch add secrets"
+        echo -e "  ${DIM}[7]${NC} Batch remove secrets"
+        echo -e "  ${DIM}[8]${NC} Edit note/description"
+        echo -e "  ${DIM}[0]${NC} Назад"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+        case "$choice" in
+            1)
+                echo -en "  ${BOLD}Label:${NC} "
+                local label
+                read -r label
+                [ -n "$label" ] && { secret_add "$label" || true; }
+                press_any_key
+                ;;
+            2)
+                echo -en "  ${BOLD}Label or # to remove:${NC} "
+                local label
+                read -r label
+                if [[ "$label" =~ ^[0-9]+$ ]] && [ "$label" -ge 1 ] && [ "$label" -le "${#SECRETS_LABELS[@]}" ]; then
+                    label="${SECRETS_LABELS[$((label - 1))]}"
+                fi
+                [ -n "$label" ] && { secret_remove "$label" || true; }
+                press_any_key
+                ;;
+            3)
+                echo -en "  ${BOLD}Label or # to rotate:${NC} "
+                local label
+                read -r label
+                if [[ "$label" =~ ^[0-9]+$ ]] && [ "$label" -ge 1 ] && [ "$label" -le "${#SECRETS_LABELS[@]}" ]; then
+                    label="${SECRETS_LABELS[$((label - 1))]}"
+                fi
+                [ -n "$label" ] && { secret_rotate "$label" || true; }
+                press_any_key
+                ;;
+            4)
+                echo -en "  ${BOLD}Label or # to toggle:${NC} "
+                local label
+                read -r label
+                if [[ "$label" =~ ^[0-9]+$ ]] && [ "$label" -ge 1 ] && [ "$label" -le "${#SECRETS_LABELS[@]}" ]; then
+                    label="${SECRETS_LABELS[$((label - 1))]}"
+                fi
+                [ -n "$label" ] && { secret_toggle "$label" || true; }
+                press_any_key
+                ;;
+            5)
+                secret_show_limits
+                echo ""
+                echo -en "  ${BOLD}Label or # to set limits:${NC} "
+                local label
+                read -r label
+                # If user entered a number, map to the label at that index
+                if [[ "$label" =~ ^[0-9]+$ ]] && [ "$label" -ge 1 ] && [ "$label" -le "${#SECRETS_LABELS[@]}" ]; then
+                    label="${SECRETS_LABELS[$((label - 1))]}"
+                fi
+                if [ -n "$label" ]; then
+                    echo -en "  ${BOLD}Max TCP connections (0=unlimited):${NC} "
+                    local mc; read -r mc
+                    echo -en "  ${BOLD}Max unique IPs (0=unlimited):${NC} "
+                    local mi; read -r mi
+                    echo -en "  ${BOLD}Data quota (e.g. 5G, 500M, 0=unlimited):${NC} "
+                    local dq; read -r dq
+                    echo -en "  ${BOLD}Expiry date (YYYY-MM-DD, 0=never):${NC} "
+                    local ex; read -r ex
+                    secret_set_limits "$label" "${mc:-0}" "${mi:-0}" "${dq:-0}" "${ex:-0}" || true
+                fi
+                press_any_key
+                ;;
+            6)
+                echo -e "  ${DIM}Введите labels separated by spaces${NC}"
+                echo -en "  ${BOLD}Labels:${NC} "
+                local batch_labels
+                read -r batch_labels
+                if [ -n "$batch_labels" ]; then
+                    # shellcheck disable=SC2086
+                    secret_add_batch $batch_labels || true
+                fi
+                press_any_key
+                ;;
+            7)
+                echo -e "  ${DIM}Введите labels separated by spaces${NC}"
+                echo -en "  ${BOLD}Labels to remove:${NC} "
+                local batch_labels
+                read -r batch_labels
+                if [ -n "$batch_labels" ]; then
+                    # shellcheck disable=SC2086
+                    secret_remove_batch "false" $batch_labels || true
+                fi
+                press_any_key
+                ;;
+            8)
+                echo -en "  ${BOLD}Label or #:${NC} "
+                local note_label
+                read -r note_label
+                if [[ "$note_label" =~ ^[0-9]+$ ]] && [ "$note_label" -ge 1 ] && [ "$note_label" -le "${#SECRETS_LABELS[@]}" ]; then
+                    note_label="${SECRETS_LABELS[$((note_label - 1))]}"
+                fi
+                if [ -n "$note_label" ]; then
+                    secret_edit_note "$note_label" || true
+                fi
+                press_any_key
+                ;;
+            0|"") return ;;
+            *) ;;
+        esac
+    done
+}
+
+show_links_menu() {
+    clear_screen
+    draw_header "SHARE LINKS & QR"
+
+    local server_ip
+    server_ip=$(get_public_ip)
+
+    if [ -z "$server_ip" ]; then
+        log_error "Cannot detect server IP"
+        press_any_key
+        return
+    fi
+
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+        local full_secret
+        full_secret=$(build_faketls_secret "${SECRETS_KEYS[$i]}")
+        local tg_link="tg://proxy?server=${server_ip}&port=${PROXY_PORT}&secret=${full_secret}"
+        local https_link="https://t.me/proxy?server=${server_ip}&port=${PROXY_PORT}&secret=${full_secret}"
+
+        echo ""
+        echo -e "  ${BRIGHT_GREEN}${BOLD}${SECRETS_LABELS[$i]}${NC}"
+        echo -e "  ${DIM}$(_repeat '─' 40)${NC}"
+        echo -e "  ${BOLD}TG Link:${NC}  ${CYAN}${tg_link}${NC}"
+        echo -e "  ${BOLD}Веб-ссылка:${NC} ${CYAN}${https_link}${NC}"
+
+        show_qr "$https_link"
+    done
+
+    # Offer to send via Telegram
+    if [ "$TELEGRAM_ENABLED" = "true" ]; then
+        echo -en "  ${BOLD}Send links via Telegram? [y/N]:${NC} "
+        local tg_choice
+        read -r tg_choice
+        case "$tg_choice" in
+            y|Y) telegram_notify_proxy_started || true ;;
+        esac
+    fi
+
+    press_any_key
+}
+
+show_telegram_menu() {
+    while true; do
+        clear_screen
+        draw_header "TELEGRAM BOT"
+        echo ""
+        if [ "$TELEGRAM_ENABLED" = "true" ]; then
+            echo -e "  Status: $(draw_status running 'Enabled')"
+            echo -e "  ${DIM}Interval: every ${TELEGRAM_INTERVAL}h | Alerts: ${TELEGRAM_ALERTS_ENABLED}${NC}"
+        else
+            echo -e "  Status: $(draw_status disabled 'Disabled')"
+        fi
+        echo ""
+        echo -e "  ${DIM}[1]${NC} Setup wizard"
+        echo -e "  ${DIM}[2]${NC} Send test message"
+        echo -e "  ${DIM}[3]${NC} Send proxy links"
+        echo -e "  ${DIM}[4]${NC} Toggle notifications"
+        echo -e "  ${DIM}[5]${NC} Toggle alerts"
+        echo -e "  ${DIM}[0]${NC} Назад"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+        case "$choice" in
+            1) telegram_setup_wizard || true ;;
+            2) telegram_test_message || true; press_any_key ;;
+            3) { telegram_notify_proxy_started && log_success "Links sent"; } || true; press_any_key ;;
+            4)
+                if [ "$TELEGRAM_ENABLED" = "true" ]; then
+                    TELEGRAM_ENABLED="false"
+                    systemctl stop mtproxymax-telegram.service 2>/dev/null
+                    log_success "Telegram disabled"
+                else
+                    if [ -n "$TELEGRAM_BOT_TOKEN" ] && [ -n "$TELEGRAM_CHAT_ID" ]; then
+                        TELEGRAM_ENABLED="true"
+                        setup_telegram_service
+                        log_success "Telegram enabled"
+                    else
+                        log_warn "Run setup wizard first"
+                    fi
+                fi
+                save_settings
+                press_any_key
+                ;;
+            5)
+                if [ "$TELEGRAM_ALERTS_ENABLED" = "true" ]; then
+                    TELEGRAM_ALERTS_ENABLED="false"
+                else
+                    TELEGRAM_ALERTS_ENABLED="true"
+                fi
+                save_settings
+                log_success "Alerts: ${TELEGRAM_ALERTS_ENABLED}"
+                press_any_key
+                ;;
+            0|"") return ;;
+            *) ;;
+        esac
+    done
+}
+
+show_settings_menu() {
+    while true; do
+        clear_screen
+        draw_header "SETTINGS"
+        echo ""
+        echo -e "  ${BOLD}Port:${NC}        ${PROXY_PORT}"
+        echo -e "  ${BOLD}IP:${NC}          ${CUSTOM_IP:-$(get_public_ip) ${DIM}(auto)${NC}}"
+        echo -e "  ${BOLD}Domain:${NC}      ${PROXY_DOMAIN}"
+        echo -e "  ${BOLD}CPU:${NC}         ${PROXY_CPUS:-unlimited}"
+        echo -e "  ${BOLD}Memory:${NC}      ${PROXY_MEMORY:-unlimited}"
+        echo -e "  ${BOLD}Masking:${NC}     ${MASKING_ENABLED}"
+        echo -e "  ${BOLD}Ad-tag:${NC}      ${AD_TAG:-${DIM}not set${NC}}"
+        echo -e "  ${BOLD}Auto-update:${NC} ${AUTO_UPDATE_ENABLED}"
+        echo -e "  ${BOLD}PROXY proto:${NC} ${PROXY_PROTOCOL}$([ "$PROXY_PROTOCOL" = "true" ] && [ -n "$PROXY_PROTOCOL_TRUSTED_CIDRS" ] && echo " (trusted: ${PROXY_PROTOCOL_TRUSTED_CIDRS})")"
+        echo -e "  ${BOLD}Движок:${NC}      telemt v$(get_telemt_version)"
+        echo ""
+        echo -e "  ${DIM}[1]${NC} Change port"
+        echo -e "  ${DIM}[2]${NC} Change IP"
+        echo -e "  ${DIM}[3]${NC} Change domain"
+        echo -e "  ${DIM}[4]${NC} Change resources (CPU/RAM)"
+        echo -e "  ${DIM}[5]${NC} Toggle traffic masking"
+        echo -e "  ${DIM}[6]${NC} Set ad-tag"
+        echo -e "  ${DIM}[7]${NC} Toggle auto-update"
+        echo -e "  ${DIM}[8]${NC} Toggle PROXY protocol"
+        echo -e "  ${DIM}[9]${NC} Engine Management"
+        echo -e "  ${DIM}[0]${NC} Назад"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+        case "$choice" in
+            1)
+                echo -en "  ${BOLD}New port:${NC} "
+                local p; read -r p
+                if validate_port "$p"; then
+                    # Remove geoblock rules on old port before changing
+                    [ -n "$BLOCKLIST_COUNTRIES" ] && { geoblock_remove_all; _remove_default_drop; }
+                    PROXY_PORT="$p"
+                    save_settings
+                    log_success "Port set to ${p}"
+                    if is_proxy_running; then
+                        echo -en "  ${DIM}Restart proxy now? [Y/n]:${NC} "
+                        local r; read -r r
+                        [[ ! "$r" =~ ^[nN] ]] && { load_secrets; restart_proxy_container || true; }
+                    fi
+                else
+                    log_error "Invalid port (must be 1-65535)"
+                fi
+                press_any_key
+                ;;
+            2)
+                local _det_ip; _det_ip=$(CUSTOM_IP="" get_public_ip)
+                echo -e "  ${DIM}Detected: ${_det_ip:-unknown}${NC}"
+                echo -en "  ${BOLD}Custom IP [${CUSTOM_IP:-auto}]:${NC} "
+                local ip; read -r ip
+                if [ "$ip" = "auto" ] || [ "$ip" = "clear" ]; then
+                    CUSTOM_IP=""
+                    save_settings
+                    log_success "IP reset to auto-detect (${_det_ip})"
+                elif [ -n "$ip" ]; then
+                    if [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$ip" =~ ^[0-9a-fA-F:]+$ ]] || [[ "$ip" =~ ^[a-zA-Z0-9]([a-zA-Z0-9._-]*[a-zA-Z0-9])?$ ]]; then
+                        CUSTOM_IP="$ip"
+                        save_settings
+                        log_success "IP/domain set to ${ip}"
+                    else
+                        log_error "Invalid IP address or domain"
+                    fi
+                fi
+                press_any_key
+                ;;
+            3)
+                echo -e "  ${DIM}[1] cloudflare.com  [2] google.com  [3] microsoft.com  [4] Custom${NC}"
+                local d; d=$(read_choice "Выбор" "1")
+                local _domain_changed=true
+                case "$d" in
+                    1) PROXY_DOMAIN="cloudflare.com" ;;
+                    2) PROXY_DOMAIN="www.google.com" ;;
+                    3) PROXY_DOMAIN="www.microsoft.com" ;;
+                    4)
+                        echo -en "  Domain: "
+                        local cd; read -r cd
+                        if [ -n "$cd" ] && validate_domain "$cd"; then
+                            PROXY_DOMAIN="$cd"
+                        elif [ -n "$cd" ]; then
+                            log_error "Invalid domain format"; press_any_key; continue
+                        else
+                            _domain_changed=false
+                        fi
+                        ;;
+                    *) _domain_changed=false ;;
+                esac
+                if $_domain_changed; then
+                    save_settings
+                    log_success "Domain set to ${PROXY_DOMAIN}"
+                    if is_proxy_running; then
+                        echo -en "  ${DIM}Restart proxy now? [Y/n]:${NC} "
+                        local r; read -r r
+                        [[ ! "$r" =~ ^[nN] ]] && { load_secrets; restart_proxy_container || true; }
+                    fi
+                fi
+                press_any_key
+                ;;
+            4)
+                echo -en "  ${BOLD}CPU cores [${PROXY_CPUS:-unlimited}]:${NC} "
+                local c; read -r c
+                local _res_changed=false
+                if [ -n "$c" ]; then
+                    if [[ "$c" =~ ^[0-9]+(\.[0-9]+)?$ ]] && awk "BEGIN{exit ($c < 0.1)}" 2>/dev/null; then
+                        PROXY_CPUS="$c"; _res_changed=true
+                    else
+                        log_error "Invalid CPU value (must be a number >= 0.1, e.g. 1, 2, 0.5)"
+                    fi
+                fi
+                echo -en "  ${BOLD}Memory [${PROXY_MEMORY:-unlimited}]:${NC} "
+                local m; read -r m
+                if [ -n "$m" ]; then
+                    if [[ "$m" =~ ^[0-9]+[bBkKmMgG]?$ ]]; then
+                        [[ "$m" =~ ^[0-9]+$ ]] && m="${m}m"
+                        PROXY_MEMORY="$m"; _res_changed=true
+                    else
+                        log_error "Invalid memory value (e.g. 256m, 1g)"
+                    fi
+                fi
+                if $_res_changed; then
+                    save_settings
+                    log_success "Resources updated (takes effect on next restart)"
+                    if is_proxy_running; then
+                        echo -en "  ${DIM}Restart proxy now? [Y/n]:${NC} "
+                        local r; read -r r
+                        [[ ! "$r" =~ ^[nN] ]] && { load_secrets; restart_proxy_container || true; }
+                    fi
+                fi
+                press_any_key
+                ;;
+            5)
+                [ "$MASKING_ENABLED" = "true" ] && MASKING_ENABLED="false" || MASKING_ENABLED="true"
+                save_settings
+                log_success "Traffic masking: ${MASKING_ENABLED}"
+                if is_proxy_running; then
+                    echo -en "  ${DIM}Restart proxy now? [Y/n]:${NC} "
+                    local r; read -r r
+                    [[ ! "$r" =~ ^[nN] ]] && { load_secrets; restart_proxy_container || true; }
+                fi
+                press_any_key
+                ;;
+            6)
+                echo -en "  ${BOLD}Ad-tag (32 hex chars, or 'remove'):${NC} "
+                local at; read -r at
+                if [ "$at" = "remove" ]; then
+                    AD_TAG=""
+                    log_success "Ad-tag removed"
+                    save_settings
+                elif [[ "$at" =~ ^[0-9a-fA-F]{32}$ ]]; then
+                    AD_TAG="$at"
+                    log_success "Ad-tag set"
+                    save_settings
+                else
+                    log_error "Invalid ad-tag (must be 32 hex characters)"
+                    press_any_key; continue
+                fi
+                load_secrets; reload_proxy_config
+                press_any_key
+                ;;
+            7)
+                [ "$AUTO_UPDATE_ENABLED" = "true" ] && AUTO_UPDATE_ENABLED="false" || AUTO_UPDATE_ENABLED="true"
+                save_settings
+                log_success "Auto-update: ${AUTO_UPDATE_ENABLED}"
+                press_any_key
+                ;;
+            8)
+                [ "$PROXY_PROTOCOL" = "true" ] && PROXY_PROTOCOL="false" || PROXY_PROTOCOL="true"
+                if [ "$PROXY_PROTOCOL" = "true" ]; then
+                    echo -en "  ${BOLD}Trusted CIDRs (comma-separated, e.g. 10.0.0.0/8,172.16.0.0/12, empty=reject all):${NC} "
+                    local cidrs; read -r cidrs
+                    PROXY_PROTOCOL_TRUSTED_CIDRS="$cidrs"
+                else
+                    PROXY_PROTOCOL_TRUSTED_CIDRS=""
+                fi
+                save_settings
+                log_success "PROXY protocol: ${PROXY_PROTOCOL}"
+                if is_proxy_running; then
+                    echo -en "  ${DIM}Restart proxy now? [Y/n]:${NC} "
+                    local r; read -r r
+                    [[ ! "$r" =~ ^[nN] ]] && { load_secrets; restart_proxy_container || true; }
+                fi
+                press_any_key
+                ;;
+            9) show_engine_menu ;;
+            0|"") return ;;
+            *) ;;
+        esac
+    done
+}
+
+# ── MTProxy Kaskad / nftables ───────────────────────────────
+
+validate_ipv4() {
+    local ip="$1"
+    [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]] || return 1
+    IFS='.' read -r o1 o2 o3 o4 <<< "$ip"
+    for o in "$o1" "$o2" "$o3" "$o4"; do
+        (( o >= 0 && o <= 255 )) || return 1
+    done
+}
+
+ensure_nft_base() {
+    nft list table ip nat >/dev/null 2>&1 || nft add table ip nat
+    nft list chain ip nat prerouting >/dev/null 2>&1 || \
+        nft 'add chain ip nat prerouting { type nat hook prerouting priority dstnat; policy accept; }'
+    nft list chain ip nat postrouting >/dev/null 2>&1 || \
+        nft 'add chain ip nat postrouting { type nat hook postrouting priority srcnat; policy accept; }'
+
+    nft list table inet filter >/dev/null 2>&1 || nft add table inet filter
+    nft list chain inet filter forward >/dev/null 2>&1 || \
+        nft 'add chain inet filter forward { type filter hook forward priority 0; policy drop; }'
+}
+
+ensure_forward_established() {
+    if ! nft list chain inet filter forward 2>/dev/null | grep -q 'ct state established,related accept'; then
+        nft insert rule inet filter forward ct state established,related accept
+    fi
+}
+
+kaskad_backup_nft_conf() {
+    [ -f "$NFT_CONF" ] && cp -a "$NFT_CONF" "${NFT_CONF}.bak.$(date +%s)"
+}
+
+kaskad_rule_block_nat() {
+    local target="$1"
+    local port="$2"
+    cat <<EOF
+table ip nat {
+    chain prerouting {
+        tcp dport $port dnat to $target:$port comment "$NFT_KASKAD_COMMENT"
+    }
+
+    chain postrouting {
+        ip daddr $target tcp dport $port masquerade comment "$NFT_KASKAD_COMMENT"
+    }
+}
+EOF
+}
+
+kaskad_rule_block_filter() {
+    local target="$1"
+    local port="$2"
+    cat <<EOF
+table inet filter {
+    chain forward {
+        ip daddr $target tcp dport $port accept comment "$NFT_KASKAD_COMMENT"
+    }
+}
+EOF
+}
+
+kaskad_append_rule_to_conf_if_missing() {
+    local snippet="$1"
+    local marker="$2"
+
+    touch "$NFT_CONF"
+    grep -qF "$marker" "$NFT_CONF" && return 0
+    printf '\n%s\n' "$snippet" >> "$NFT_CONF"
+}
+
+kaskad_apply_rule_runtime() {
+    local target="$1"
+    local port="$2"
+
+    ensure_nft_base
+    ensure_forward_established
+
+    nft add rule ip nat prerouting tcp dport "$port" dnat to "${target}:${port}" comment "$NFT_KASKAD_COMMENT" 2>/dev/null || true
+    nft add rule ip nat postrouting ip daddr "$target" tcp dport "$port" masquerade comment "$NFT_KASKAD_COMMENT" 2>/dev/null || true
+    nft add rule inet filter forward ip daddr "$target" tcp dport "$port" accept comment "$NFT_KASKAD_COMMENT" 2>/dev/null || true
+}
+
+kaskad_add_rule_cli() {
+    local target="$1"
+    local port="$2"
+
+    if ! validate_ipv4 "$target"; then
+        log_error "Некорректный IPv4-адрес: ${target}"
+        return 1
+    fi
+
+    if ! validate_port "$port"; then
+        log_error "Некорректный порт: ${port}"
+        return 1
+    fi
+
+    kaskad_backup_nft_conf
+    kaskad_apply_rule_runtime "$target" "$port"
+
+    kaskad_append_rule_to_conf_if_missing "$(kaskad_rule_block_nat "$target" "$port")" "tcp dport $port dnat to $target:$port comment \"$NFT_KASKAD_COMMENT\""
+    kaskad_append_rule_to_conf_if_missing "$(kaskad_rule_block_filter "$target" "$port")" "ip daddr $target tcp dport $port accept comment \"$NFT_KASKAD_COMMENT\""
+
+    nft -c -f "$NFT_CONF" >/dev/null 2>&1 || {
+        log_error "В $NFT_CONF получился некорректный синтаксис. Проверьте файл вручную."
+        return 1
+    }
+
+    systemctl restart nftables >/dev/null 2>&1 || nft -f "$NFT_CONF"
+    log_success "Правило Kaskad добавлено: TCP ${port} -> ${target}:${port}"
+}
+
+kaskad_list_rules_cli() {
+    echo ""
+    draw_header "АКТИВНЫЕ ПРАВИЛА KASKAD"
+    echo ""
+    nft list chain ip nat prerouting 2>/dev/null | grep "$NFT_KASKAD_COMMENT" || echo "  DNAT-правил нет."
+    echo ""
+    nft list chain ip nat postrouting 2>/dev/null | grep "$NFT_KASKAD_COMMENT" || true
+    echo ""
+    nft list chain inet filter forward 2>/dev/null | grep "$NFT_KASKAD_COMMENT" || true
+}
+
+kaskad_delete_rule_runtime() {
+    local port="$1"
+
+    while read -r handle; do
+        [ -n "$handle" ] && nft delete rule ip nat prerouting handle "$handle"
+    done < <(nft -a list chain ip nat prerouting 2>/dev/null | awk -v p="$port" '/tg_mtproxy_kaskad/ && $0 ~ ("dport " p " ") {print $NF}')
+
+    while read -r handle; do
+        [ -n "$handle" ] && nft delete rule ip nat postrouting handle "$handle"
+    done < <(nft -a list chain ip nat postrouting 2>/dev/null | awk -v p="$port" '/tg_mtproxy_kaskad/ && $0 ~ ("dport " p " ") {print $NF}')
+
+    while read -r handle; do
+        [ -n "$handle" ] && nft delete rule inet filter forward handle "$handle"
+    done < <(nft -a list chain inet filter forward 2>/dev/null | awk -v p="$port" '/tg_mtproxy_kaskad/ && $0 ~ ("dport " p " ") {print $NF}')
+}
+
+kaskad_delete_rule_from_conf() {
+    local port="$1"
+    local tmp
+    tmp=$(_mktemp) || return 1
+    awk -v p="$port" '
+        /tg_mtproxy_kaskad/ && $0 ~ ("dport " p " ") {next}
+        {print}
+    ' "$NFT_CONF" > "$tmp"
+    cat "$tmp" > "$NFT_CONF"
+}
+
+kaskad_remove_rule_cli() {
+    local port="$1"
+    if ! validate_port "$port"; then
+        log_error "Некорректный порт: ${port}"
+        return 1
+    fi
+
+    kaskad_delete_rule_runtime "$port"
+    [ -f "$NFT_CONF" ] && kaskad_delete_rule_from_conf "$port"
+    nft -c -f "$NFT_CONF" >/dev/null 2>&1 && (systemctl restart nftables >/dev/null 2>&1 || nft -f "$NFT_CONF")
+    log_success "Правила Kaskad для порта ${port} удалены"
+}
+
+kaskad_flush_rules_cli() {
+    while read -r handle; do
+        [ -n "$handle" ] && nft delete rule ip nat prerouting handle "$handle"
+    done < <(nft -a list chain ip nat prerouting 2>/dev/null | awk '/tg_mtproxy_kaskad/ {print $NF}')
+
+    while read -r handle; do
+        [ -n "$handle" ] && nft delete rule ip nat postrouting handle "$handle"
+    done < <(nft -a list chain ip nat postrouting 2>/dev/null | awk '/tg_mtproxy_kaskad/ {print $NF}')
+
+    while read -r handle; do
+        [ -n "$handle" ] && nft delete rule inet filter forward handle "$handle"
+    done < <(nft -a list chain inet filter forward 2>/dev/null | awk '/tg_mtproxy_kaskad/ {print $NF}')
+
+    if [ -f "$NFT_CONF" ]; then
+        grep -v "$NFT_KASKAD_COMMENT" "$NFT_CONF" > "${NFT_CONF}.tmp" && mv "${NFT_CONF}.tmp" "$NFT_CONF"
+        nft -c -f "$NFT_CONF" >/dev/null 2>&1 && (systemctl restart nftables >/dev/null 2>&1 || nft -f "$NFT_CONF")
+    fi
+
+    log_success "Все правила Kaskad удалены"
+}
+
+show_kaskad_menu() {
+    while true; do
+        clear_screen
+        draw_header "MTPROXY KASKAD (NFTABLES)"
+        echo ""
+        echo -e "  ${DIM}[1]${NC} Показать активные правила"
+        echo -e "  ${DIM}[2]${NC} Добавить правило каскада"
+        echo -e "  ${DIM}[3]${NC} Удалить правило по порту"
+        echo -e "  ${DIM}[4]${NC} Сбросить все правила Kaskad"
+        echo -e "  ${DIM}[0]${NC} Назад"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+        case "$choice" in
+            1) kaskad_list_rules_cli; press_any_key ;;
+            2)
+                echo -en "  ${BOLD}IP назначения:${NC} "
+                local target; read -r target
+                echo -en "  ${BOLD}Порт:${NC} "
+                local port; read -r port
+                kaskad_add_rule_cli "$target" "$port" || true
+                press_any_key
+                ;;
+            3)
+                echo -en "  ${BOLD}Порт правила для удаления:${NC} "
+                local port; read -r port
+                kaskad_remove_rule_cli "$port" || true
+                press_any_key
+                ;;
+            4)
+                echo -en "  ${YELLOW}Удалить ВСЕ правила Kaskad? [y/N]:${NC} "
+                local confirm; read -r confirm
+                [[ "$confirm" =~ ^[yYдД]$ ]] && kaskad_flush_rules_cli || log_info "Отменено"
+                press_any_key
+                ;;
+            0|"") return ;;
+            *) ;;
+        esac
+    done
+}
+
+show_engine_menu() {
+    while true; do
+        clear_screen
+        draw_header "УПРАВЛЕНИЕ ДВИЖКОМ"
+        echo ""
+        echo -e "  ${BOLD}Движок:${NC}    telemt v$(get_telemt_version)"
+        echo -e "  ${BOLD}Pinned to:${NC} commit ${TELEMT_COMMIT}"
+        echo ""
+        local _expected="${TELEMT_MIN_VERSION}-${TELEMT_COMMIT}"
+        local _current; _current=$(get_telemt_version)
+        if [ "$_current" = "$_expected" ]; then
+            echo -e "  ${GREEN}${SYM_OK} Движок обновлён${NC}"
+        elif _version_gte "$_current" "$_expected"; then
+            echo -e "  ${GREEN}${SYM_OK} Движок обновлён (версия новее закреплённой)${NC}"
+        else
+            echo -e "  ${YELLOW}Доступно обновление: v${_current} -> v${_expected}${NC}"
+            echo -e "  ${DIM}Запуск: mtproxymax update${NC}"
+        fi
+        echo ""
+        echo -e "  ${DIM}[1]${NC} Принудительно пересобрать движок"
+        echo -e "  ${DIM}[0]${NC} Назад"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+        case "$choice" in
+            1)
+                echo -en "  ${DIM}Принудительно пересобрать из коммита ${TELEMT_COMMIT}? [Y/n]:${NC} "
+                local confirm; read -r confirm
+                if [[ "$confirm" =~ ^[nN] ]]; then
+                    press_any_key; continue
+                fi
+                build_telemt_image true
+                if is_proxy_running; then
+                    load_secrets
+                    restart_proxy_container || true
+                fi
+                press_any_key
+                ;;
+            0|"") return ;;
+            *) ;;
+        esac
+    done
+}
+
+show_traffic_menu() {
+    clear_screen
+    draw_header "ЛОГИ И ТРАФИК"
+
+    if ! is_proxy_running; then
+        echo ""
+        echo -e "  ${DIM}Прокси не запущен${NC}"
+        press_any_key
+        return
+    fi
+
+    local t_in t_out conns
+    read -r t_in t_out conns <<< "$(get_cumulative_proxy_stats)"
+
+    # Batch-load all user stats in one pass
+    _load_all_cumulative_user_stats 2>/dev/null
+
+    echo ""
+    echo -e "  ${BOLD}Общий трафик${NC}"
+    echo -e "  ${SYM_DOWN} Download: $(format_bytes "$t_in")"
+    echo -e "  ${SYM_UP} Upload:   $(format_bytes "$t_out")"
+    echo -e "  ${BOLD}Active Connections:${NC} ${conns}"
+    echo ""
+
+    echo -e "  ${BOLD}Статистика по пользователям${NC}"
+    echo -e "  ${DIM}$(_repeat '─' 60)${NC}"
+
+    local i
+    for i in "${!SECRETS_LABELS[@]}"; do
+        [ "${SECRETS_ENABLED[$i]}" = "true" ] || continue
+        local label="${SECRETS_LABELS[$i]}"
+        local u_in=${_batch_cum_in["$label"]:-0}
+        local u_out=${_batch_cum_out["$label"]:-0}
+        local u_conns=${_batch_cum_conns["$label"]:-0}
+        echo -e "  ${GREEN}${SYM_OK}${NC} ${BOLD}${label}${NC}"
+        echo -e "    ${SYM_DOWN} $(format_bytes "$u_in")  ${SYM_UP} $(format_bytes "$u_out")  conns: ${u_conns}"
+    done
+
+    echo ""
+    echo -e "  ${DIM}[1]${NC} Поток логов в реальном времени"
+    echo -e "  ${DIM}[2]${NC} Лог подключений"
+    echo -e "  ${DIM}[0]${NC} Назад"
+
+    local choice
+    choice=$(read_choice "Выбор" "0")
+    case "$choice" in
+        1) echo -e "  ${DIM}Нажмите Ctrl+C для остановки...${NC}"; docker logs -f --tail 30 "$CONTAINER_NAME" 2>&1 || true ;;
+        2)
+            echo ""
+            if [ -f "$CONNECTION_LOG" ] && [ -s "$CONNECTION_LOG" ]; then
+                tail -n 50 "$CONNECTION_LOG"
+            else
+                echo -e "  ${DIM}Лог подключений пуст${NC}"
+            fi
+            press_any_key
+            ;;
+    esac
+}
+
+# ── Info & Help Sub-Pages ────────────────────────────────────
+
+show_info_faketls() {
+    clear_screen
+    draw_header "FAKETLS OBFUSCATION"
+    echo ""
+    echo -e "  ${BOLD}What is FakeTLS?${NC}"
+    echo -e "  FakeTLS makes your proxy traffic look identical to normal"
+    echo -e "  HTTPS (TLS 1.3) connections. Deep Packet Inspection (DPI)"
+    echo -e "  systems cannot distinguish proxy traffic from regular web"
+    echo -e "  browsing, making your proxy virtually undetectable."
+    echo ""
+    echo -e "  ${BOLD}How it works:${NC}"
+    echo -e "  1. Clients initiate a TLS handshake to a \"cover\" domain"
+    echo -e "     (e.g., cloudflare.com) — this is the FakeTLS domain."
+    echo -e "  2. The handshake looks exactly like a real TLS 1.3 session"
+    echo -e "     to any network observer or firewall."
+    echo -e "  3. Inside the encrypted tunnel, the actual MTProxy protocol"
+    echo -e "     carries your Telegram data."
+    echo -e "  4. Censors see only \"user connected to cloudflare.com via"
+    echo -e "     HTTPS\" — completely normal traffic."
+    echo ""
+    echo -e "  ${BOLD}Конфигурация:${NC}"
+    echo -e "  ${DIM}Domain:${NC}  Choose a popular, non-blocked site (cloudflare.com,"
+    echo -e "           google.com, microsoft.com). The domain appears in the"
+    echo -e "           TLS handshake SNI field."
+    echo -e "  ${DIM}Secret:${NC}  FakeTLS secrets start with \`ee\` prefix followed by"
+    echo -e "           the raw secret + hex-encoded domain name."
+    echo ""
+    echo -e "  ${BOLD}Best practices:${NC}"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Use a domain hosted on the same CDN/IP range as your server"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Choose popular sites with high traffic (harder to block)"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Enable traffic masking alongside FakeTLS for maximum stealth"
+    echo ""
+    press_any_key
+}
+
+show_info_masking() {
+    clear_screen
+    draw_header "TRAFFIC MASKING"
+    echo ""
+    echo -e "  ${BOLD}What is Traffic Masking?${NC}"
+    echo -e "  When enabled, your server responds to non-proxy connections"
+    echo -e "  by forwarding them to a real website. This means if a censor"
+    echo -e "  probes your server, they see a legitimate website — not a proxy."
+    echo ""
+    echo -e "  ${BOLD}How it works:${NC}"
+    echo -e "  1. A probe connects to your server on port 443."
+    echo -e "  2. The connection doesn't contain a valid proxy secret."
+    echo -e "  3. Instead of dropping the connection (suspicious!), the server"
+    echo -e "     forwards it to the real website (e.g., cloudflare.com)."
+    echo -e "  4. The probe receives a real TLS certificate and web content."
+    echo -e "  5. Your server looks like a normal web server."
+    echo ""
+    echo -e "  ${BOLD}Конфигурация:${NC}"
+    echo -e "  ${DIM}mask = true${NC}       Enable masking in telemt config"
+    echo -e "  ${DIM}mask_host${NC}         Domain to forward probes to (default: your FakeTLS domain)"
+    echo -e "  ${DIM}mask_port = 443${NC}   Port on the target website"
+    echo ""
+    echo -e "  ${BOLD}Why it matters:${NC}"
+    echo -e "  Without masking, active probers can detect that your server"
+    echo -e "  only accepts connections with valid secrets and drops others."
+    echo -e "  This behavior is a fingerprint that reveals it's a proxy."
+    echo -e "  Masking eliminates this fingerprint entirely."
+    echo ""
+    press_any_key
+}
+
+show_info_multisecret() {
+    clear_screen
+    draw_header "MULTI-SECRET MANAGEMENT"
+    echo ""
+    echo -e "  ${BOLD}What are Secrets?${NC}"
+    echo -e "  Each secret is a unique key that grants a user access to your"
+    echo -e "  proxy. Think of it like giving someone a password to connect."
+    echo -e "  MTProxyMax supports multiple secrets simultaneously."
+    echo ""
+    echo -e "  ${BOLD}Use cases:${NC}"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} Give each family member their own secret"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} Track traffic per user (each secret = one user)"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} Revoke one user's access without affecting others"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} Rotate compromised keys while keeping others active"
+    echo ""
+    echo -e "  ${BOLD}Commands:${NC}"
+    echo -e "  ${GREEN}mtproxymax secret add <label>${NC}      Create a new secret"
+    echo -e "  ${GREEN}mtproxymax secret add-batch <l1> <l2> ...${NC}  Add multiple (single restart)"
+    echo -e "  ${GREEN}mtproxymax secret remove <label>${NC}   Delete a secret"
+    echo -e "  ${GREEN}mtproxymax secret remove-batch <l1> <l2> ...${NC}  Remove multiple (single restart)"
+    echo -e "  ${GREEN}mtproxymax secret rotate <label>${NC}   Replace key, keep label"
+    echo -e "  ${GREEN}mtproxymax secret enable <label>${NC}   Re-enable a disabled secret"
+    echo -e "  ${GREEN}mtproxymax secret disable <label>${NC}  Temporarily disable access"
+    echo -e "  ${GREEN}mtproxymax secret list${NC}             Show all secrets + traffic"
+    echo ""
+    echo -e "  ${BOLD}Labels:${NC}"
+    echo -e "  Labels are human-readable names (a-z, 0-9, _, -). They appear"
+    echo -e "  in traffic stats so you can see who is using how much bandwidth."
+    echo ""
+    press_any_key
+}
+
+show_info_adtag() {
+    clear_screen
+    draw_header "AD-TAG / PROMOTED CHANNEL"
+    echo ""
+    echo -e "  ${BOLD}What is an Ad-Tag?${NC}"
+    echo -e "  Telegram's official feature that lets proxy operators show a"
+    echo -e "  sponsored channel to users who connect through their proxy."
+    echo -e "  This is how you can earn from running a public proxy."
+    echo ""
+    echo -e "  ${BOLD}How to get an ad-tag:${NC}"
+    echo -e "  1. Open Telegram and message @MTProxyBot"
+    echo -e "  2. Register your proxy server"
+    echo -e "  3. Choose a channel to promote"
+    echo -e "  4. You'll receive a 32-character hex ad-tag"
+    echo ""
+    echo -e "  ${BOLD}How to set it:${NC}"
+    echo -e "  ${GREEN}mtproxymax adtag set <hex>${NC}    Set the ad-tag"
+    echo -e "  ${GREEN}mtproxymax adtag remove${NC}       Remove the ad-tag"
+    echo ""
+    echo -e "  ${BOLD}How it appears:${NC}"
+    echo -e "  Users who connect through your proxy will see the promoted"
+    echo -e "  channel at the top of their chat list. They can dismiss it,"
+    echo -e "  but it reappears periodically."
+    echo ""
+    echo -e "  ${DIM}Note: Ad-tags are entirely optional. Your proxy works"
+    echo -e "  perfectly fine without one.${NC}"
+    echo ""
+    press_any_key
+}
+
+show_info_telegram() {
+    clear_screen
+    draw_header "TELEGRAM BOT INTEGRATION"
+    echo ""
+    echo -e "  ${BOLD}What does the bot do?${NC}"
+    echo -e "  Control your proxy from your phone via Telegram. The bot runs"
+    echo -e "  as a separate systemd service and responds to commands."
+    echo ""
+    echo -e "  ${BOLD}Available commands:${NC}"
+    echo -e "  /mp_status         Check proxy status, uptime, traffic"
+    echo -e "  /mp_secrets        List all secrets with per-user stats"
+    echo -e "  /mp_link           Get proxy links + QR code"
+    echo -e "  /mp_add <label>    Add a new user secret"
+    echo -e "  /mp_remove <label> Remove a secret"
+    echo -e "  /mp_rotate <label> Rotate a secret (new key)"
+    echo -e "  /mp_enable <label> Enable a secret"
+    echo -e "  /mp_disable <label> Disable a secret"
+    echo -e "  /mp_limits         Show per-user limits"
+    echo -e "  /mp_setlimit       Set user limits (conns, IPs, quota, expiry)"
+    echo -e "  /mp_upstreams      List upstream routes"
+    echo -e "  /mp_traffic        Detailed traffic breakdown"
+    echo -e "  /mp_health         Run health diagnostics"
+    echo -e "  /mp_restart        Restart the proxy"
+    echo -e "  /mp_update         Check for script updates"
+    echo -e "  /mp_help           Show all commands"
+    echo ""
+    echo -e "  ${BOLD}Automatic notifications:${NC}"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} Proxy startup — sends links + QR codes"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} Downtime alerts — notifies when proxy goes down"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} Auto-recovery — attempts restart and reports result"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} Periodic reports — traffic summaries at your interval"
+    echo ""
+    echo -e "  ${BOLD}Setup:${NC} Run ${GREEN}mtproxymax telegram setup${NC}"
+    echo ""
+    press_any_key
+}
+
+show_info_qrcode() {
+    clear_screen
+    draw_header "QR CODE SHARING"
+    echo ""
+    echo -e "  ${BOLD}What are proxy QR codes?${NC}"
+    echo -e "  QR codes encode your proxy link so users can connect by"
+    echo -e "  simply scanning with their phone's camera in Telegram."
+    echo ""
+    echo -e "  ${BOLD}How to use:${NC}"
+    echo -e "  1. Open Telegram > Settings > Data and Storage > Proxy"
+    echo -e "  2. Tap \"Add Proxy\" or use the camera to scan"
+    echo -e "  3. The proxy configuration is applied automatically"
+    echo ""
+    echo -e "  ${BOLD}QR generation methods (auto-detected):${NC}"
+    echo -e "  ${GREEN}1.${NC} ${BOLD}qrencode${NC} (native) — fastest, renders in terminal"
+    echo -e "     Install: ${DIM}apt install qrencode${NC}"
+    echo -e "  ${GREEN}2.${NC} ${BOLD}Docker${NC} — uses alpine + qrencode container"
+    echo -e "  ${GREEN}3.${NC} ${BOLD}Web API${NC} — qrserver.com (for Telegram photo messages)"
+    echo ""
+    echo -e "  ${BOLD}Commands:${NC}"
+    echo -e "  ${GREEN}mtproxymax secret qr <label>${NC}   Show QR in terminal"
+    echo -e "  ${GREEN}mtproxymax secret link <label>${NC} Show shareable link"
+    echo ""
+    echo -e "  ${BOLD}Via Telegram bot:${NC}"
+    echo -e "  Send /mp_link to your bot — it replies with both the link"
+    echo -e "  and a scannable QR code image."
+    echo ""
+    press_any_key
+}
+
+show_info_geoblock() {
+    clear_screen
+    draw_header "GEO-BLOCKING"
+    echo ""
+    echo -e "  ${BOLD}What is Geo-Blocking?${NC}"
+    echo -e "  Block connections from specific countries using IP-based"
+    echo -e "  CIDR lists. Useful for limiting who can use your proxy."
+    echo ""
+    echo -e "  ${BOLD}How it works:${NC}"
+    echo -e "  1. Country CIDR lists are downloaded from ipdeny.com"
+    echo -e "  2. IP ranges are added to iptables/nftables rules"
+    echo -e "  3. Connections from blocked countries are dropped at the"
+    echo -e "     network level before reaching the proxy"
+    echo ""
+    echo -e "  ${BOLD}Commands:${NC}"
+    echo -e "  ${GREEN}mtproxymax geoblock add <CC>${NC}    Block a country (e.g., CN)"
+    echo -e "  ${GREEN}mtproxymax geoblock remove <CC>${NC} Unblock a country"
+    echo -e "  ${GREEN}mtproxymax geoblock list${NC}        Show blocked countries"
+    echo ""
+    echo -e "  ${BOLD}Частые коды стран:${NC}"
+    echo -e "  US (United States)  DE (Germany)    NL (Netherlands)"
+    echo -e "  CN (China)          RU (Russia)     IR (Iran)"
+    echo -e "  FR (France)         GB (UK)         SG (Singapore)"
+    echo ""
+    echo -e "  ${DIM}Note: Geo-blocking uses host networking, so iptables"
+    echo -e "  rules are applied on the host, not inside the container.${NC}"
+    echo ""
+    press_any_key
+}
+
+show_info_autoupdate() {
+    clear_screen
+    draw_header "AUTO-UPDATE"
+    echo ""
+    echo -e "  ${BOLD}How Auto-Update works:${NC}"
+    echo -e "  MTProxyMax checks GitHub for new releases and can update"
+    echo -e "  itself with a single command."
+    echo ""
+    echo -e "  ${BOLD}Update process:${NC}"
+    echo -e "  1. Query GitHub API for the latest release version"
+    echo -e "  2. Compare with your installed version"
+    echo -e "  3. If newer, prompt for confirmation"
+    echo -e "  4. Backup current script to ${DIM}/opt/mtproxymax/backups/${NC}"
+    echo -e "  5. Download and validate new version"
+    echo -e "  6. Atomic replace (mv, not copy)"
+    echo -e "  7. Regenerate Telegram service if active"
+    echo ""
+    echo -e "  ${BOLD}Commands:${NC}"
+    echo -e "  ${GREEN}mtproxymax update${NC}   Check and apply updates"
+    echo ""
+    echo -e "  ${BOLD}Safety:${NC}"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Always backs up before updating"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Validates downloaded script (checks #!/bin/bash header)"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Rollback possible from ${DIM}backups/${NC} directory"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Telegram notification when update is available"
+    echo ""
+    press_any_key
+}
+
+show_info_health() {
+    clear_screen
+    draw_header "HEALTH MONITORING"
+    echo ""
+    echo -e "  ${BOLD}What does Health Monitoring do?${NC}"
+    echo -e "  Continuously checks that your proxy is running and accessible."
+    echo -e "  If the proxy goes down, it attempts automatic recovery."
+    echo ""
+    echo -e "  ${BOLD}Checks performed:${NC}"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Docker daemon running"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Proxy container status (up/down)"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Port listening on configured port"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Prometheus metrics endpoint responding"
+    echo -e "  ${GREEN}${SYM_CHECK}${NC} Telegram bot service status"
+    echo ""
+    echo -e "  ${BOLD}Auto-recovery:${NC}"
+    echo -e "  The Telegram bot service checks every 5 minutes. If the proxy"
+    echo -e "  container is down:"
+    echo -e "  1. Sends alert: \"Proxy is down! Attempting auto-restart...\""
+    echo -e "  2. Runs ${GREEN}mtproxymax start${NC}"
+    echo -e "  3. Reports success or failure via Telegram"
+    echo ""
+    echo -e "  ${BOLD}Manual check:${NC}"
+    echo -e "  ${GREEN}mtproxymax health${NC}   Run diagnostic checks"
+    echo ""
+    echo -e "  ${BOLD}Docker auto-restart:${NC}"
+    echo -e "  The container runs with ${DIM}--restart unless-stopped${NC}, so Docker"
+    echo -e "  itself will restart it on crashes. The health monitor is an"
+    echo -e "  additional safety net."
+    echo ""
+    press_any_key
+}
+
+show_info_userlimits() {
+    clear_screen
+    draw_header "USER LIMITS"
+    echo ""
+    echo -e "  ${BOLD}${YELLOW}Per-User Connection & Bandwidth Limits${NC}"
+    echo ""
+    echo -e "  MTProxyMax lets you set limits per secret (user), so you can"
+    echo -e "  prevent abuse when sharing your proxy with others."
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BOLD}Available limits:${NC}"
+    echo ""
+    echo -e "  ${CYAN}1. Max TCP Connections${NC}"
+    echo -e "     Limits how many simultaneous connections a user can have."
+    echo -e "     Prevents one user from overloading your server."
+    echo -e "     ${DIM}Recommended: 50-200 for normal use${NC}"
+    echo ""
+    echo -e "  ${CYAN}2. Max Unique IPs${NC}"
+    echo -e "     Limits how many different devices/IPs can use a secret."
+    echo -e "     Great for controlling who shares your link."
+    echo -e "     ${DIM}Recommended: 3-5 for family, 1-2 for personal${NC}"
+    echo ""
+    echo -e "  ${CYAN}3. Data Quota${NC}"
+    echo -e "     Bandwidth cap per user in bytes."
+    echo -e "     Useful for fair-use on limited bandwidth servers."
+    echo -e "     ${DIM}Recommended: 5G-50G depending on your plan${NC}"
+    echo ""
+    echo -e "  ${CYAN}4. Expiration Date${NC}"
+    echo -e "     Auto-disables a secret after the given date."
+    echo -e "     Useful for time-limited access (trials, guests)."
+    echo -e "     ${DIM}Format: YYYY-MM-DD (e.g. 2026-06-30)${NC}"
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BOLD}How to set limits:${NC}"
+    echo ""
+    echo -e "  ${GREEN}TUI:${NC}  Main Menu > Secret Management > Set user limits"
+    echo ""
+    echo -e "  ${GREEN}CLI:${NC}"
+    echo -e "    mtproxymax secret setlimit alice conns 100"
+    echo -e "    mtproxymax secret setlimit alice ips 5"
+    echo -e "    mtproxymax secret setlimit alice quota 10G"
+    echo -e "    mtproxymax secret setlimit alice expires 2026-06-30"
+    echo ""
+    echo -e "  ${GREEN}Telegram:${NC}"
+    echo -e "    /mp_setlimit alice 100 5 10G 2026-06-30"
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BOLD}Examples:${NC}"
+    echo ""
+    echo -e "  ${CYAN}Family sharing (5 people):${NC}"
+    echo -e "    Give each person their own secret with:"
+    echo -e "    Max IPs: 3 (phone + tablet + desktop)"
+    echo -e "    Max conns: 100"
+    echo -e "    Data quota: 10G per person"
+    echo ""
+    echo -e "  ${CYAN}Public proxy:${NC}"
+    echo -e "    Max IPs: 1 (one device per key)"
+    echo -e "    Max conns: 50"
+    echo -e "    Data quota: 2G"
+    echo ""
+    echo -e "  ${DIM}Set any limit to 0 for unlimited.${NC}"
+    echo ""
+    press_any_key
+}
+
+show_info_proxychaining() {
+    clear_screen
+    draw_header "PROXY CHAINING"
+    echo ""
+    echo -e "  ${BOLD}${YELLOW}Route Traffic Through Intermediate Proxies${NC}"
+    echo ""
+    echo -e "  Proxy chaining routes your proxy's outbound traffic through"
+    echo -e "  a SOCKS5/SOCKS4 proxy before it reaches Telegram servers."
+    echo ""
+    echo -e "  ${BOLD}How it works:${NC}"
+    echo ""
+    echo -e "    User --> ${CYAN}Your Server${NC} --> ${GREEN}SOCKS5 Proxy${NC} --> Telegram"
+    echo ""
+    echo -e "  ${BOLD}Why Iran users need this:${NC}"
+    echo ""
+    echo -e "  ${CYAN}1.${NC} Your server IP gets blocked by ISPs"
+    echo -e "     ${DIM}Solution: Route through a clean IP via SOCKS5${NC}"
+    echo ""
+    echo -e "  ${CYAN}2.${NC} Direct routes to Telegram are throttled"
+    echo -e "     ${DIM}Solution: Route through a different network path${NC}"
+    echo ""
+    echo -e "  ${CYAN}3.${NC} IP gets flagged for hosting proxy"
+    echo -e "     ${DIM}Solution: Use Cloudflare WARP or VPN as exit${NC}"
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BOLD}Common setups:${NC}"
+    echo ""
+    echo -e "  ${CYAN}Cloudflare WARP (Free, Easiest):${NC}"
+    echo -e "    Install WARP on your server, it creates a SOCKS5 at 127.0.0.1:40000"
+    echo -e "    ${GREEN}curl -fsSL https://pkg.cloudflareclient.com | bash${NC}"
+    echo -e "    ${GREEN}warp-cli register && warp-cli set-mode proxy && warp-cli connect${NC}"
+    echo -e "    Then add upstream: socks5 at 127.0.0.1:40000"
+    echo ""
+    echo -e "  ${CYAN}SSH Tunnel (Any VPS):${NC}"
+    echo -e "    Create a SOCKS5 tunnel through another server:"
+    echo -e "    ${GREEN}ssh -D 1080 -N user@backup-vps${NC}"
+    echo -e "    Then add upstream: socks5 at 127.0.0.1:1080"
+    echo ""
+    echo -e "  ${CYAN}Secondary VPS:${NC}"
+    echo -e "    Run a SOCKS5 proxy on a second server (e.g., dante, microsocks)"
+    echo -e "    Then add upstream: socks5 at <backup-ip>:1080"
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BOLD}Weight-based load balancing:${NC}"
+    echo ""
+    echo -e "  When you have multiple upstreams, traffic is distributed by weight."
+    echo -e "  Higher weight = more traffic routed through that upstream."
+    echo ""
+    echo -e "  Example:"
+    echo -e "    direct    weight=10  (33% of traffic)"
+    echo -e "    warp      weight=20  (67% of traffic)"
+    echo ""
+    echo -e "  If one upstream fails, traffic automatically shifts to others."
+    echo ""
+    press_any_key
+}
+
+show_info_upstreams() {
+    clear_screen
+    draw_header "UPSTREAM TYPES"
+    echo ""
+    echo -e "  ${BOLD}${YELLOW}Understanding Upstream Connection Types${NC}"
+    echo ""
+    echo -e "  ${CYAN}Direct:${NC}"
+    echo -e "    Connects straight to Telegram servers."
+    echo -e "    Fastest, but your server IP is visible."
+    echo -e "    ${DIM}Best when: your IP isn't blocked${NC}"
+    echo ""
+    echo -e "  ${CYAN}SOCKS5:${NC}"
+    echo -e "    Routes through a SOCKS5 proxy server."
+    echo -e "    Supports authentication (username/password)."
+    echo -e "    Supports DNS resolution through proxy."
+    echo -e "    ${DIM}Best when: you need to hide your server IP or bypass blocks${NC}"
+    echo ""
+    echo -e "  ${CYAN}SOCKS4:${NC}"
+    echo -e "    Older protocol, identification via user_id only (no password)."
+    echo -e "    ${DIM}Best when: only SOCKS4 is available${NC}"
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BOLD}How weights work:${NC}"
+    echo ""
+    echo -e "  Each upstream has a weight from 1-100."
+    echo -e "  Traffic is distributed proportionally."
+    echo ""
+    echo -e "  ${BOLD}Example with 3 upstreams:${NC}"
+    echo -e "    direct (w:10) + warp (w:20) + backup (w:5) = 35 total"
+    echo -e "    direct gets 10/35 = 29%"
+    echo -e "    warp gets   20/35 = 57%"
+    echo -e "    backup gets  5/35 = 14%"
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BOLD}Setting up a SOCKS5 proxy:${NC}"
+    echo ""
+    echo -e "  ${CYAN}Option A: Cloudflare WARP${NC} (Free)"
+    echo -e "    ${GREEN}curl -fsSL https://pkg.cloudflareclient.com | bash"
+    echo -e "    warp-cli register"
+    echo -e "    warp-cli set-mode proxy"
+    echo -e "    warp-cli connect${NC}"
+    echo -e "    Proxy available at: 127.0.0.1:40000"
+    echo ""
+    echo -e "  ${CYAN}Option B: microsocks${NC} (On another VPS)"
+    echo -e "    ${GREEN}git clone https://github.com/rofl0r/microsocks && cd microsocks"
+    echo -e "    make && sudo cp microsocks /usr/local/bin/"
+    echo -e "    microsocks -p 1080 &${NC}"
+    echo ""
+    echo -e "  ${CYAN}Option C: SSH Tunnel${NC}"
+    echo -e "    ${GREEN}ssh -D 1080 -f -N user@other-server${NC}"
+    echo ""
+    echo -e "  ${BOLD}Bind to interface (advanced):${NC}"
+    echo -e "    When adding an upstream, you can bind outbound traffic"
+    echo -e "    to a specific IP address on your server."
+    echo -e "    Useful if your server has multiple IPs and you want"
+    echo -e "    different upstreams to exit from different addresses."
+    echo ""
+    echo -e "  ${BOLD}Testing an upstream:${NC}"
+    echo -e "    TUI: Security & Routing > Proxy Chaining > Test"
+    echo -e "    CLI: ${GREEN}mtproxymax upstream test <name>${NC}"
+    echo ""
+    press_any_key
+}
+
+show_info_menu() {
+    while true; do
+        clear_screen
+        draw_header "INFO & HELP"
+        echo ""
+        echo -e "  ${BOLD}Learn about each feature in detail:${NC}"
+        echo ""
+        echo -e "  ${BRIGHT_CYAN}[1]${NC}  FakeTLS Obfuscation"
+        echo -e "  ${BRIGHT_CYAN}[2]${NC}  Traffic Masking"
+        echo -e "  ${BRIGHT_CYAN}[3]${NC}  Multi-Secret Management"
+        echo -e "  ${BRIGHT_CYAN}[4]${NC}  Ad-Tag / Promoted Channel"
+        echo -e "  ${BRIGHT_CYAN}[5]${NC}  Telegram Bot Integration"
+        echo -e "  ${BRIGHT_CYAN}[6]${NC}  QR Code Sharing"
+        echo -e "  ${BRIGHT_CYAN}[7]${NC}  Geo-Blocking"
+        echo -e "  ${BRIGHT_CYAN}[8]${NC}  Auto-Update"
+        echo -e "  ${BRIGHT_CYAN}[9]${NC}  Health Monitoring"
+        echo ""
+        echo -e "  ${BRIGHT_CYAN}[a]${NC}  Per-User Limits"
+        echo -e "  ${BRIGHT_CYAN}[b]${NC}  Proxy Chaining"
+        echo -e "  ${BRIGHT_CYAN}[c]${NC}  Upstream Types & Setup"
+        echo ""
+        echo -e "  ${BRIGHT_CYAN}[p]${NC}  Port Forwarding Guide (Home Users)"
+        echo -e "  ${BRIGHT_CYAN}[f]${NC}  Firewall Configuration Guide"
+        echo ""
+        echo -e "  ${DIM}[0]${NC}  Back"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+        case "$choice" in
+            1) show_info_faketls ;;
+            2) show_info_masking ;;
+            3) show_info_multisecret ;;
+            4) show_info_adtag ;;
+            5) show_info_telegram ;;
+            6) show_info_qrcode ;;
+            7) show_info_geoblock ;;
+            8) show_info_autoupdate ;;
+            9) show_info_health ;;
+            a|A) show_info_userlimits ;;
+            b|B) show_info_proxychaining ;;
+            c|C) show_info_upstreams ;;
+            p|P) show_port_forward_guide ;;
+            f|F) show_firewall_guide ;;
+            0|"") return ;;
+            *) ;;
+        esac
+    done
+}
+
+show_port_forward_guide() {
+    clear_screen
+    draw_header "PORT FORWARDING GUIDE"
+    echo ""
+    echo -e "  ${BOLD}${YELLOW}For Home Users Running Behind a Router${NC}"
+    echo ""
+    echo -e "  If your server is behind a home router (NAT), users on the"
+    echo -e "  internet cannot reach your proxy directly. You need to set up"
+    echo -e "  ${BOLD}port forwarding${NC} on your router."
+    echo ""
+    echo -e "  ${BOLD}What port forwarding does:${NC}"
+    echo -e "  Routes incoming connections on your public IP to your server"
+    echo -e "  on the local network."
+    echo ""
+    echo -e "  ${BOLD}  Internet --> [Your Public IP:${PROXY_PORT}] --> Router"
+    echo -e "       --> [Your Server LAN IP:${PROXY_PORT}] --> MTProxyMax${NC}"
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BOLD}Step 1: Find your server's local IP${NC}"
+    echo -e "  ${DIM}Run on your server:${NC}"
+    echo -e "  ${GREEN}  ip addr show | grep 'inet ' | grep -v 127.0.0.1${NC}"
+    echo -e "  ${DIM}Look for something like 192.168.1.100 or 10.0.0.50${NC}"
+    echo ""
+    echo -e "  ${BOLD}Step 2: Access your router admin panel${NC}"
+    echo -e "  ${DIM}Open a browser and go to one of:${NC}"
+    echo -e "  ${CYAN}  http://192.168.1.1${NC}  (most common)"
+    echo -e "  ${CYAN}  http://192.168.0.1${NC}  (some ISPs)"
+    echo -e "  ${CYAN}  http://10.0.0.1${NC}     (some networks)"
+    echo ""
+    echo -e "  ${BOLD}Step 3: Find the port forwarding section${NC}"
+    echo -e "  ${DIM}Common locations by router brand:${NC}"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} ${BOLD}TP-Link:${NC}    Advanced > NAT Forwarding > Port Forwarding"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} ${BOLD}Netgear:${NC}    Advanced > Advanced Setup > Port Forwarding"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} ${BOLD}ASUS:${NC}       WAN > Virtual Server / Port Forwarding"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} ${BOLD}Linksys:${NC}    Apps & Gaming > Single Port Forwarding"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} ${BOLD}D-Link:${NC}     Advanced > Port Forwarding"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} ${BOLD}Xfinity:${NC}    Advanced > Port Forwarding"
+    echo ""
+    echo -e "  ${BOLD}Step 4: Create the forwarding rule${NC}"
+    echo -e "  ${DIM}+──────────────────────────────────────────+${NC}"
+    echo -e "  ${DIM}|  Service Name:  ${NC}MTProxyMax"
+    echo -e "  ${DIM}|  External Port: ${NC}${BOLD}${PROXY_PORT}${NC}"
+    echo -e "  ${DIM}|  Internal Port: ${NC}${BOLD}${PROXY_PORT}${NC}"
+    echo -e "  ${DIM}|  Internal IP:   ${NC}${BOLD}<your server LAN IP>${NC}"
+    echo -e "  ${DIM}|  Protocol:      ${NC}${BOLD}TCP${NC}"
+    echo -e "  ${DIM}+──────────────────────────────────────────+${NC}"
+    echo ""
+    echo -e "  ${BOLD}Step 5: Find your public IP${NC}"
+    echo -e "  ${DIM}This is the IP your users will connect to:${NC}"
+    echo -e "  ${GREEN}  curl -s https://api.ipify.org${NC}"
+    echo ""
+    echo -e "  ${BOLD}Step 6: Test it${NC}"
+    echo -e "  ${DIM}From another device (phone on mobile data, not WiFi):${NC}"
+    echo -e "  Open the proxy link using your public IP and port ${PROXY_PORT}."
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${YELLOW}${SYM_WARN} Important notes:${NC}"
+    echo -e "  ${DIM}- If your ISP uses CGNAT (shared public IP), port forwarding"
+    echo -e "    won't work. Contact your ISP to request a dedicated IP.${NC}"
+    echo -e "  ${DIM}- Your public IP may change. Consider a DDNS service if"
+    echo -e "    you have a dynamic IP (no-ip.com, duckdns.org).${NC}"
+    echo -e "  ${DIM}- Make sure your server firewall also allows the port"
+    echo -e "    (see Firewall Guide).${NC}"
+    echo ""
+    press_any_key
+}
+
+show_firewall_guide() {
+    clear_screen
+    draw_header "FIREWALL CONFIGURATION"
+    echo ""
+    echo -e "  ${BOLD}${YELLOW}You must allow TCP port ${PROXY_PORT} through your firewall${NC}"
+    echo ""
+    echo -e "  If your server has a firewall enabled, incoming connections"
+    echo -e "  to your proxy will be blocked unless you add a rule."
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BRIGHT_CYAN}${BOLD}UFW (Ubuntu/Debian)${NC}"
+    echo -e "  ${DIM}UFW is the default firewall on Ubuntu.${NC}"
+    echo ""
+    echo -e "  ${GREEN}  # Allow proxy port${NC}"
+    echo -e "  ${WHITE}  sudo ufw allow ${PROXY_PORT}/tcp${NC}"
+    echo ""
+    echo -e "  ${GREEN}  # Verify${NC}"
+    echo -e "  ${WHITE}  sudo ufw status${NC}"
+    echo ""
+    echo -e "  ${GREEN}  # If UFW is not enabled yet${NC}"
+    echo -e "  ${WHITE}  sudo ufw enable${NC}"
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BRIGHT_CYAN}${BOLD}firewalld (CentOS/RHEL/Fedora)${NC}"
+    echo -e "  ${DIM}firewalld is the default on Red Hat-based systems.${NC}"
+    echo ""
+    echo -e "  ${GREEN}  # Allow proxy port (permanent)${NC}"
+    echo -e "  ${WHITE}  sudo firewall-cmd --permanent --add-port=${PROXY_PORT}/tcp${NC}"
+    echo ""
+    echo -e "  ${GREEN}  # Reload rules${NC}"
+    echo -e "  ${WHITE}  sudo firewall-cmd --reload${NC}"
+    echo ""
+    echo -e "  ${GREEN}  # Verify${NC}"
+    echo -e "  ${WHITE}  sudo firewall-cmd --list-ports${NC}"
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BRIGHT_CYAN}${BOLD}iptables (Any Linux)${NC}"
+    echo -e "  ${DIM}Low-level firewall available on all Linux distributions.${NC}"
+    echo ""
+    echo -e "  ${GREEN}  # Allow proxy port${NC}"
+    echo -e "  ${WHITE}  sudo iptables -I INPUT -p tcp --dport ${PROXY_PORT} -j ACCEPT${NC}"
+    echo ""
+    echo -e "  ${GREEN}  # Save rules (Debian/Ubuntu)${NC}"
+    echo -e "  ${WHITE}  sudo apt install iptables-persistent${NC}"
+    echo -e "  ${WHITE}  sudo netfilter-persistent save${NC}"
+    echo ""
+    echo -e "  ${GREEN}  # Save rules (CentOS/RHEL)${NC}"
+    echo -e "  ${WHITE}  sudo service iptables save${NC}"
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BRIGHT_CYAN}${BOLD}nftables (Modern Linux)${NC}"
+    echo -e "  ${DIM}Newer replacement for iptables on modern kernels.${NC}"
+    echo ""
+    echo -e "  ${GREEN}  # Allow proxy port${NC}"
+    echo -e "  ${WHITE}  sudo nft add rule inet filter input tcp dport ${PROXY_PORT} accept${NC}"
+    echo ""
+    draw_line 60 '─'
+    echo ""
+    echo -e "  ${BRIGHT_CYAN}${BOLD}Cloud Provider Firewalls${NC}"
+    echo -e "  ${DIM}If using a VPS, also check the provider's security group:${NC}"
+    echo ""
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} ${BOLD}AWS:${NC}          EC2 > Security Groups > Inbound Rules > Add TCP ${PROXY_PORT}"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} ${BOLD}Google Cloud:${NC} VPC > Firewall Rules > Create > TCP ${PROXY_PORT}"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} ${BOLD}DigitalOcean:${NC} Networking > Firewalls > Inbound TCP ${PROXY_PORT}"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} ${BOLD}Oracle Cloud:${NC} VCN > Security List > Ingress TCP ${PROXY_PORT}"
+    echo -e "  ${CYAN}${SYM_ARROW}${NC} ${BOLD}Hetzner:${NC}      Firewall > Inbound TCP ${PROXY_PORT}"
+    echo ""
+    echo -e "  ${YELLOW}${SYM_WARN} Test after adding rules:${NC}"
+    echo -e "  ${WHITE}  curl -v telnet://YOUR_SERVER_IP:${PROXY_PORT}${NC}"
+    echo -e "  ${DIM}  (should connect, not timeout)${NC}"
+    echo ""
+    press_any_key
+}
+
+show_about() {
+    while true; do
+        clear_screen
+        echo ""
+        show_banner
+
+        local w=$TERM_WIDTH
+        draw_box_top "$w"
+        draw_box_center "${BRIGHT_GREEN}${BOLD}ABOUT MTPROXYMAX${NC}" "$w"
+        draw_box_sep "$w"
+        draw_box_empty "$w"
+        draw_box_line "  ${BOLD}Created by:${NC}  Sam" "$w"
+        draw_box_line "  ${BOLD}Publisher:${NC}   r00t-men GiS ;-)" "$w"
+        draw_box_line "  ${BOLD}Version:${NC}     v${VERSION}" "$w"
+        draw_box_line "  ${BOLD}Движок:${NC}      telemt v$(get_telemt_version) (Rust)" "$w"
+        draw_box_line "  ${BOLD}License:${NC}     MIT" "$w"
+        draw_box_line "  ${BOLD}GitHub:${NC}      github.com/${GITHUB_REPO}" "$w"
+        draw_box_empty "$w"
+        draw_box_sep "$w"
+        draw_box_center "${BOLD}FEATURES${NC}" "$w"
+        draw_box_empty "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} FakeTLS obfuscation (deep TLS 1.3 fidelity)" "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} Traffic masking (undetectable to DPI probes)" "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} Multi-secret user management with per-user stats" "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} Ad-tag / promoted channel support" "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} Telegram bot for remote management" "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} QR code generation (3-tier fallback)" "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} Geo-blocking by country" "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} Proxy chaining (SOCKS5/SOCKS4 upstream routing)" "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} Per-user connection, IP, bandwidth & expiry limits" "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} Per-user traffic analytics (Prometheus)" "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} Auto-update with backup & rollback" "$w"
+        draw_box_line "  ${GREEN}${SYM_CHECK}${NC} Health monitoring & auto-recovery" "$w"
+        draw_box_empty "$w"
+        draw_box_sep "$w"
+        draw_box_center "${DIM}Made with care by Sam — r00t-men GiS ;-)${NC}" "$w"
+        draw_box_bottom "$w"
+        echo ""
+        echo -e "  ${DIM}[1]${NC} Check for updates"
+        echo -e "  ${DIM}[2]${NC} Create backup"
+        echo -e "  ${DIM}[3]${NC} Restore backup"
+        echo -e "  ${DIM}[4]${NC} List backups"
+        echo -e "  ${DIM}[0]${NC} Назад"
+
+        local choice
+        choice=$(read_choice "Выбор" "0")
+        case "$choice" in
+            1) self_update || true; press_any_key ;;
+            2) create_backup || true; press_any_key ;;
+            3)
+                list_backups
+                echo -en "  ${BOLD}Backup file path:${NC} "
+                local bf; read -r bf
+                [ -n "$bf" ] && restore_backup "$bf" || true
+                press_any_key
+                ;;
+            4) list_backups; press_any_key ;;
+            0|"") return ;;
+            *) ;;
+        esac
+    done
+}
+
+# ── Section 19: Main Entry Point ─────────────────────────────
+
+main() {
+    cli_main "$@"
+}
+
+main "$@"
