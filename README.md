@@ -126,6 +126,7 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server
 - 📊 Мониторинг Beszel — быстрый старт
 - 🤖 Docker-контейнер с Telegram-ботом через Xray proxy
 - 🐳 Dockermon — интерактивное управление Docker из терминала
+- 🖥️ Работа со `screen` — мультиплексор терминала
 
 👉 https://github.com/r00t-man/MZT/tree/main/info
 
@@ -199,6 +200,7 @@ MZT
 │   ├── Базовые команды Ubuntu 24 для подготовки VPN-ноды.md
 │   ├── Мониторинг Beszel — быстрый старт.md
 │   ├── Dockermon — интерактивное управление Docker из терминала.md
+│   ├── Работа со screen — мультиплексор терминала.md
 │   └── Правила маршрутизации Remna.md
 │
 ├── Server_Security
