@@ -48,6 +48,7 @@
 | 📊 **Grafana + Prometheus (Central)** | Центральный сервер мониторинга | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)` |
 | 🛰️ **Node Exporter Agent** | Агент мониторинга для удалённых нод | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)` |
 | 🖥️ **Start SSH MOTD** | Красивый MOTD с метриками сервера и Docker | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server-stat-modt.sh)` |
+| 🌐 **Yandex DNS DoT** | Настройка DNS-over-TLS через Яндекс DNS на сервере | `bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/ya-dns-dot.sh)` |
 
 ---
 
