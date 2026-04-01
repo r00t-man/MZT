@@ -209,9 +209,21 @@ IPV4_WITH_GW="$IPV4_LOCAL (gw $DEFAULT_GW)"
 DNS_SERVERS="$(awk '/^nameserver / {print $2}' /etc/resolv.conf 2>/dev/null | paste -sd ', ' -)"
 [ -z "$DNS_SERVERS" ] && DNS_SERVERS="not found"
 
-PUBLIC_DNS="$(resolvectl dns "$DEFAULT_IFACE" 2>/dev/null | sed -n 's/^.*: //p' | xargs)"
-PUBLIC_DNS="$(printf '%s' "$PUBLIC_DNS" | sed 's/[[:space:]]\+/, /g')"
-[ -z "$PUBLIC_DNS" ] && PUBLIC_DNS="not found"
+UPSTREAM_DNS="$(resolvectl dns "$DEFAULT_IFACE" 2>/dev/null | sed -n 's/^.*: //p' | xargs)"
+
+if [ -z "$UPSTREAM_DNS" ]; then
+  UPSTREAM_DNS="$(resolvectl status 2>/dev/null | awk '
+    /^Global$/ {in_global=1; next}
+    in_global && /^[[:space:]]*Link / {exit}
+    in_global && /DNS Servers:/ {
+      sub(/.*DNS Servers:[[:space:]]*/, "", $0)
+      print
+      exit
+    }' | xargs)"
+fi
+
+UPSTREAM_DNS="$(printf '%s' "$UPSTREAM_DNS" | sed 's/[[:space:]]\+/, /g')"
+[ -z "$UPSTREAM_DNS" ] && UPSTREAM_DNS="not found"
 
 if command -v systemctl >/dev/null 2>&1; then
   FAILED_UNITS="$(systemctl --failed --no-legend --no-pager 2>/dev/null | grep -c '\.service\|\.mount\|\.timer\|\.socket\|\.target\|\.scope\|\.slice' 2>/dev/null)"
@@ -301,18 +313,18 @@ if [ "$FAILED_UNITS" -ne 0 ] 2>/dev/null; then
 fi
 print_metric_plain "$BLUE"    "CPU cores:"       "$CPU_CORES"
 
-print_metric_bar   "$BLUE"    "Load 1m:"         "$LOAD1_VAL"    "$LOAD1_PCT"    "$LOAD1_PCT%"
-print_metric_bar   "$BLUE"    "Load 5m:"         "$LOAD5_VAL"    "$LOAD5_PCT"    "$LOAD5_PCT%"
-print_metric_bar   "$BLUE"    "Load 15m:"        "$LOAD15_VAL"   "$LOAD15_PCT"   "$LOAD15_PCT%"
-print_metric_bar   "$MAGENTA" "RAM:"             "$RAM_VAL"      "$MEM_PCT"      "$MEM_PCT%, avail $MEM_AVAIL_H"
-print_metric_bar   "$YELLOW"  "Disk /:"          "$DISK_VAL"     "$DISK_USED_PCT" "$DISK_USED_PCT% used"
+print_metric_bar   "$BLUE"    "Load 1m:"         "$LOAD1_VAL"     "$LOAD1_PCT"     "$LOAD1_PCT%"
+print_metric_bar   "$BLUE"    "Load 5m:"         "$LOAD5_VAL"     "$LOAD5_PCT"     "$LOAD5_PCT%"
+print_metric_bar   "$BLUE"    "Load 15m:"        "$LOAD15_VAL"    "$LOAD15_PCT"    "$LOAD15_PCT%"
+print_metric_bar   "$MAGENTA" "RAM:"             "$RAM_VAL"       "$MEM_PCT"       "$MEM_PCT%, avail $MEM_AVAIL_H"
+print_metric_bar   "$YELLOW"  "Disk /:"          "$DISK_VAL"      "$DISK_USED_PCT" "$DISK_USED_PCT% used"
 
 print_metric_plain "$GREEN"   "Iface:"           "$DEFAULT_IFACE"
 print_metric_plain "$GREEN"   "IPv4:"            "$IPV4_WITH_GW"
 print_metric_plain "$GREEN"   "Public IPv4:"     "$PUBLIC_IP"
 print_metric_plain "$PURPLE"  "IPv6:"            "$IPV6"
 print_metric_plain "$CYAN"    "Local DNS:"       "$DNS_SERVERS"
-print_metric_plain "$CYAN"    "Public DNS:"      "$PUBLIC_DNS"
+print_metric_plain "$CYAN"    "Upstream DNS:"    "$UPSTREAM_DNS"
 
 print_metric_plain "$YELLOW"  "Docker links:"    "$DOCKER_LINKS_VAL"
 print_metric_plain "$YELLOW"  "Containers:"      "$DOCKER_CONTAINERS_VAL"
