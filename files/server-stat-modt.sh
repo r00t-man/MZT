@@ -1,49 +1,51 @@
 #!/bin/bash
 
-# Создание файла /etc/update-motd.d/99-server-stats, если его нет
+set -e
+
 echo "Создание файла /etc/update-motd.d/99-server-stats..."
 if [ ! -f /etc/update-motd.d/99-server-stats ]; then
     sudo touch /etc/update-motd.d/99-server-stats
     sudo chmod +x /etc/update-motd.d/99-server-stats
 fi
 
-# Отключение лишних MOTD блоков
+echo "Проверка зависимостей..."
+if ! command -v curl >/dev/null 2>&1; then
+    echo "curl не найден, устанавливаю..."
+    sudo apt-get update
+    sudo apt-get install -y curl
+fi
+
 echo "Отключение лишних MOTD блоков..."
-sudo chmod -x /etc/update-motd.d/10-help-text
-sudo chmod -x /etc/update-motd.d/50-motd-news
-sudo chmod -x /etc/update-motd.d/60-unminimize
-sudo chmod -x /etc/update-motd.d/91-release-upgrade
-sudo chmod -x /etc/update-motd.d/92-unattended-upgrades
-sudo chmod -x /etc/update-motd.d/85-fwupd
-sudo chmod -x /etc/update-motd.d/90-updates-available
-sudo chmod -x /etc/update-motd.d/91-contract-ua-esm-status
-sudo chmod -x /etc/update-motd.d/95-hwe-eol
-sudo chmod -x /etc/update-motd.d/97-overlayroot
-sudo chmod -x /etc/update-motd.d/98-fsck-at-reboot
-sudo chmod -x /etc/update-motd.d/98-reboot-required
+sudo chmod -x /etc/update-motd.d/10-help-text 2>/dev/null || true
+sudo chmod -x /etc/update-motd.d/50-motd-news 2>/dev/null || true
+sudo chmod -x /etc/update-motd.d/60-unminimize 2>/dev/null || true
+sudo chmod -x /etc/update-motd.d/85-fwupd 2>/dev/null || true
+sudo chmod -x /etc/update-motd.d/90-updates-available 2>/dev/null || true
+sudo chmod -x /etc/update-motd.d/91-contract-ua-esm-status 2>/dev/null || true
+sudo chmod -x /etc/update-motd.d/91-release-upgrade 2>/dev/null || true
+sudo chmod -x /etc/update-motd.d/92-unattended-upgrades 2>/dev/null || true
+sudo chmod -x /etc/update-motd.d/95-hwe-eol 2>/dev/null || true
+sudo chmod -x /etc/update-motd.d/97-overlayroot 2>/dev/null || true
+sudo chmod -x /etc/update-motd.d/98-fsck-at-reboot 2>/dev/null || true
+sudo chmod -x /etc/update-motd.d/98-reboot-required 2>/dev/null || true
 sudo rm -f /etc/update-motd.d/50-landscape-sysinfo
 
-# Отключение и маскировка ненужных systemd юнитов
 echo "Отключение ненужных systemd юнитов..."
-sudo systemctl disable --now motd-news.service
-sudo systemctl mask motd-news.service
-sudo systemctl reset-failed motd-news.service
+sudo systemctl disable --now motd-news.service 2>/dev/null || true
+sudo systemctl mask motd-news.service 2>/dev/null || true
+sudo systemctl reset-failed motd-news.service 2>/dev/null || true
 
-# Сброс статуса "failed" юнитов
 echo "Сброс статуса failed юнитов..."
-sudo systemctl reset-failed
+sudo systemctl reset-failed 2>/dev/null || true
 
-# Отключаем и маскируем ненужные пакеты
-echo "Отключение ненужных пакетов..."
-sudo systemctl stop apt-daily.timer
-sudo systemctl stop apt-daily-upgrade.timer
-sudo systemctl disable apt-daily.timer
-sudo systemctl disable apt-daily-upgrade.timer
+echo "Отключение ненужных таймеров apt..."
+sudo systemctl stop apt-daily.timer 2>/dev/null || true
+sudo systemctl stop apt-daily-upgrade.timer 2>/dev/null || true
+sudo systemctl disable apt-daily.timer 2>/dev/null || true
+sudo systemctl disable apt-daily-upgrade.timer 2>/dev/null || true
 
-# Настройка MOTD
 echo "Настройка MOTD..."
 
-# Создание файла MOTD
 FILE="/etc/update-motd.d/99-server-stats"
 
 sudo tee "$FILE" > /dev/null <<'EOF'
@@ -88,6 +90,11 @@ safe_int() {
 bar_pct() {
   pct="$1"
   width="${2:-22}"
+
+  [ -z "$pct" ] && pct=0
+  [ "$pct" -lt 0 ] 2>/dev/null && pct=0
+  [ "$pct" -gt 100 ] 2>/dev/null && pct=100
+
   filled=$(( pct * width / 100 ))
   empty=$(( width - filled ))
   color="$(color_by_pct "$pct")"
@@ -158,9 +165,9 @@ LOAD1="$(awk '{print $1}' /proc/loadavg 2>/dev/null)"
 LOAD5="$(awk '{print $2}' /proc/loadavg 2>/dev/null)"
 LOAD15="$(awk '{print $3}' /proc/loadavg 2>/dev/null)"
 
-LOAD1_PCT="$(awk -v l="$LOAD1" -v c="$CPU_CORES" 'BEGIN { p=(l/c)*100; if (p<0) p=0; if (p>999) p=999; printf "%d", p }')"
-LOAD5_PCT="$(awk -v l="$LOAD5" -v c="$CPU_CORES" 'BEGIN { p=(l/c)*100; if (p<0) p=0; if (p>999) p=999; printf "%d", p }')"
-LOAD15_PCT="$(awk -v l="$LOAD15" -v c="$CPU_CORES" 'BEGIN { p=(l/c)*100; if (p<0) p=0; if (p>999) p=999; printf "%d", p }')"
+LOAD1_PCT="$(awk -v l="$LOAD1" -v c="$CPU_CORES" 'BEGIN { p=(l/c)*100; if (p<0) p=0; if (p>100) p=100; printf "%d", p }')"
+LOAD5_PCT="$(awk -v l="$LOAD5" -v c="$CPU_CORES" 'BEGIN { p=(l/c)*100; if (p<0) p=0; if (p>100) p=100; printf "%d", p }')"
+LOAD15_PCT="$(awk -v l="$LOAD15" -v c="$CPU_CORES" 'BEGIN { p=(l/c)*100; if (p<0) p=0; if (p>100) p=100; printf "%d", p }')"
 
 MEM_LINE="$(free -m | awk '/^Mem:/ {print $2" "$3" "$7}')"
 MEM_TOTAL_MB="$(printf '%s\n' "$MEM_LINE" | awk '{print $1}')"
@@ -183,19 +190,40 @@ DEFAULT_IFACE="$(ip route show default 2>/dev/null | awk '/default/ {print $5; e
 DEFAULT_GW="$(ip route show default 2>/dev/null | awk '/default/ {print $3; exit}')"
 [ -z "$DEFAULT_GW" ] && DEFAULT_GW="unknown"
 
-IPV4="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | awk '!/^(10\.|127\.|169\.254\.|172\.(1[6-9]|2[0-9]|3[0-1])\.|192\.168\.)/' | paste -sd ', ' -)"
-IPV6="$(ip -6 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | awk '!/^fe80/' | paste -sd ', ' -)"
+IPV4_LOCAL="$(ip -4 -o addr show dev "$DEFAULT_IFACE" scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | head -n1)"
+[ -z "$IPV4_LOCAL" ] && IPV4_LOCAL="not assigned"
 
-[ -z "$IPV4" ] && IPV4="not assigned"
+IPV6="$(ip -6 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | awk '!/^fe80/' | paste -sd ', ' -)"
 [ -z "$IPV6" ] && IPV6="not assigned"
 
-IPV4_WITH_GW="$IPV4 (gw $DEFAULT_GW)"
+PUBLIC_IP="$(
+  timeout 2 curl -4 -fsS ifconfig.me 2>/dev/null || \
+  timeout 2 curl -4 -fsS api.ipify.org 2>/dev/null || \
+  timeout 2 curl -4 -fsS icanhazip.com 2>/dev/null
+)"
+PUBLIC_IP="$(printf '%s' "$PUBLIC_IP" | tr -d '\r\n[:space:]')"
+[ -z "$PUBLIC_IP" ] && PUBLIC_IP="unavailable"
+
+IPV4_WITH_GW="$IPV4_LOCAL (gw $DEFAULT_GW)"
 
 DNS_SERVERS="$(awk '/^nameserver / {print $2}' /etc/resolv.conf 2>/dev/null | paste -sd ', ' -)"
 [ -z "$DNS_SERVERS" ] && DNS_SERVERS="not found"
 
-PUBLIC_DNS="$(resolvectl dns "$DEFAULT_IFACE" 2>/dev/null | awk 'NR==1{sub(/^.*: /,""); print}' | xargs | sed 's/[[:space:]]\+/, /g')"
-[ -z "$PUBLIC_DNS" ] && PUBLIC_DNS="not found"
+UPSTREAM_DNS="$(resolvectl dns "$DEFAULT_IFACE" 2>/dev/null | sed -n 's/^.*: //p' | xargs)"
+
+if [ -z "$UPSTREAM_DNS" ]; then
+  UPSTREAM_DNS="$(resolvectl status 2>/dev/null | awk '
+    /^Global$/ {in_global=1; next}
+    in_global && /^[[:space:]]*Link / {exit}
+    in_global && /DNS Servers:/ {
+      sub(/.*DNS Servers:[[:space:]]*/, "", $0)
+      print
+      exit
+    }' | xargs)"
+fi
+
+UPSTREAM_DNS="$(printf '%s' "$UPSTREAM_DNS" | sed 's/[[:space:]]\+/, /g')"
+[ -z "$UPSTREAM_DNS" ] && UPSTREAM_DNS="not found"
 
 if command -v systemctl >/dev/null 2>&1; then
   FAILED_UNITS="$(systemctl --failed --no-legend --no-pager 2>/dev/null | grep -c '\.service\|\.mount\|\.timer\|\.socket\|\.target\|\.scope\|\.slice' 2>/dev/null)"
@@ -270,6 +298,7 @@ LOAD15_VAL="$LOAD15 ($LOAD15_PCT%)"
 RAM_VAL="$MEM_USED_H / $MEM_TOTAL_H used"
 DISK_VAL="$DISK_FREE_H free / $DISK_TOTAL_H total"
 DOCKER_LINKS_VAL="$DOCKER_BRIDGES bridge / $DOCKER_VETH veth"
+
 printf "\n"
 printf "%s%sServer Metrics%s\n" "$BOLD" "$CYAN" "$RESET"
 printf "%s────────────────────────────────────────────────────────────────────%s\n" "$GRAY" "$RESET"
@@ -284,17 +313,18 @@ if [ "$FAILED_UNITS" -ne 0 ] 2>/dev/null; then
 fi
 print_metric_plain "$BLUE"    "CPU cores:"       "$CPU_CORES"
 
-print_metric_bar   "$BLUE"    "Load 1m:"         "$LOAD1_VAL"   "$LOAD1_PCT"   "$LOAD1_PCT%"
-print_metric_bar   "$BLUE"    "Load 5m:"         "$LOAD5_VAL"   "$LOAD5_PCT"   "$LOAD5_PCT%"
-print_metric_bar   "$BLUE"    "Load 15m:"        "$LOAD15_VAL"  "$LOAD15_PCT"  "$LOAD15_PCT%"
-print_metric_bar   "$MAGENTA" "RAM:"             "$RAM_VAL"     "$MEM_PCT"     "$MEM_PCT%, avail $MEM_AVAIL_H"
-print_metric_bar   "$YELLOW"  "Disk /:"          "$DISK_VAL"    "$DISK_USED_PCT" "$DISK_USED_PCT% used"
+print_metric_bar   "$BLUE"    "Load 1m:"         "$LOAD1_VAL"     "$LOAD1_PCT"     "$LOAD1_PCT%"
+print_metric_bar   "$BLUE"    "Load 5m:"         "$LOAD5_VAL"     "$LOAD5_PCT"     "$LOAD5_PCT%"
+print_metric_bar   "$BLUE"    "Load 15m:"        "$LOAD15_VAL"    "$LOAD15_PCT"    "$LOAD15_PCT%"
+print_metric_bar   "$MAGENTA" "RAM:"             "$RAM_VAL"       "$MEM_PCT"       "$MEM_PCT%, avail $MEM_AVAIL_H"
+print_metric_bar   "$YELLOW"  "Disk /:"          "$DISK_VAL"      "$DISK_USED_PCT" "$DISK_USED_PCT% used"
 
 print_metric_plain "$GREEN"   "Iface:"           "$DEFAULT_IFACE"
 print_metric_plain "$GREEN"   "IPv4:"            "$IPV4_WITH_GW"
+print_metric_plain "$GREEN"   "Public IPv4:"     "$PUBLIC_IP"
 print_metric_plain "$PURPLE"  "IPv6:"            "$IPV6"
 print_metric_plain "$CYAN"    "Local DNS:"       "$DNS_SERVERS"
-print_metric_plain "$CYAN"    "Public DNS:"       "$PUBLIC_DNS"
+print_metric_plain "$CYAN"    "Upstream DNS:"    "$UPSTREAM_DNS"
 
 print_metric_plain "$YELLOW"  "Docker links:"    "$DOCKER_LINKS_VAL"
 print_metric_plain "$YELLOW"  "Containers:"      "$DOCKER_CONTAINERS_VAL"
@@ -304,8 +334,9 @@ print_metric_color_value "$YELLOW" "$DOCKER_RESTART_COLOR" "Restarting ct:" "$DO
 printf "\n"
 EOF
 
-# Сделать скрипт исполнимым
 sudo chmod +x /etc/update-motd.d/99-server-stats
+
+echo "Проверка результата..."
 run-parts /etc/update-motd.d/
 
 echo "Все настройки завершены!"
