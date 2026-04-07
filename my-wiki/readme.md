@@ -218,6 +218,12 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server
 
 [https://github.com/r00t-man/MZT/blob/main/info/%D0%A0%D0%B0%D0%B1%D0%BE%D1%82%D0%B0%20%D1%81%D0%BE%20screen%20%E2%80%94%20%D0%BC%D1%83%D0%BB%D1%8C%D1%82%D0%B8%D0%BF%D0%BB%D0%B5%D0%BA%D1%81%D0%BE%D1%80%20%D1%82%D0%B5%D1%80%D0%BC%D0%B8%D0%BD%D0%B0%D0%BB%D0%B0.md](https://github.com/r00t-man/MZT/blob/main/info/%D0%A0%D0%B0%D0%B1%D0%BE%D1%82%D0%B0%20%D1%81%D0%BE%20screen%20%E2%80%94%20%D0%BC%D1%83%D0%BB%D1%8C%D1%82%D0%B8%D0%BF%D0%BB%D0%B5%D0%BA%D1%81%D0%BE%D1%80%20%D1%82%D0%B5%D1%80%D0%BC%D0%B8%D0%BD%D0%B0%D0%BB%D0%B0.md)
 
+🚀 **Быстрая установка `scrmenu` (CLI-меню для `screen`):**
+
+```bash
+sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/heads/main/files/scrmenu.sh -o /usr/local/bin/scrmenu && chmod +x /usr/local/bin/scrmenu'
+```
+
 ---
 
 # ⚠️ Дисклеймер

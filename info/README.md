@@ -15,6 +15,12 @@
 - 🐳 [Dockermon — интерактивное управление Docker из терминала](./Dockermon%20—%20интерактивное%20управление%20Docker%20из%20терминала.md)
 - 🖥️ [Работа со `screen` — мультиплексор терминала](./Работа%20со%20screen%20—%20мультиплексор%20терминала.md)
 
+**Быстрая установка `scrmenu` (CLI-меню для `screen`):**
+
+```bash
+sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/heads/main/files/scrmenu.sh -o /usr/local/bin/scrmenu && chmod +x /usr/local/bin/scrmenu'
+```
+
 
 ## 🔐 Новая статья в Server Security
 
