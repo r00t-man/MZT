@@ -129,6 +129,14 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server
 - 🐳 Dockermon — интерактивное управление Docker из терминала
 - 🖥️ Работа со `screen` — мультиплексор терминала
 
+📘 Прямой файл: [MZT/info/Работа со `screen` — мультиплексор терминала.md](./info/Работа%20со%20screen%20—%20мультиплексор%20терминала.md)
+
+🚀 Быстрая установка `scrmenu` (CLI-меню для `screen`):
+
+```bash
+sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/heads/main/files/scrmenu.sh -o /usr/local/bin/scrmenu && chmod +x /usr/local/bin/scrmenu'
+```
+
 👉 https://github.com/r00t-man/MZT/tree/main/info
 
 ---
