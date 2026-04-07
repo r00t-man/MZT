@@ -8,8 +8,8 @@
 - определяет его фактический `MAC`;
 - отключает получение DNS от DHCP через `netplan`;
 - включает DoT в `systemd-resolved`;
-- настраивает **Yandex DNS (Basic)** как основной;
-- добавляет резервный DoT (Cloudflare);
+- настраивает **AdGuard + Cloudflare** как основные DNS;
+- добавляет **Yandex DNS** как резервный DoT;
 - создаёт бэкапы изменяемых файлов;
 - применяет настройки и показывает итоговую проверку.
 
@@ -44,9 +44,9 @@ RESOLVED_DROPIN_DIR="/etc/systemd/resolved.conf.d"
 RESOLVED_DOT_FILE="${RESOLVED_DROPIN_DIR}/10-dot.conf"
 IFACE="eth0"
 
-# Yandex DNS (Basic) + резерв Cloudflare (DoT)
-YANDEX_DNS="77.88.8.8#common.dot.dns.yandex.net 77.88.8.1#common.dot.dns.yandex.net"
-BACKUP_DNS="1.1.1.1#one.one.one.one 1.0.0.1#one.one.one.one"
+# Основные DNS (AdGuard + Cloudflare) и резерв Yandex (DoT)
+PRIMARY_DNS="94.140.14.14#dns.adguard-dns.com 1.1.1.1#one.one.one.one 1.0.0.1#one.one.one.one"
+FALLBACK_DNS="77.88.8.8#common.dot.dns.yandex.net 77.88.8.1#common.dot.dns.yandex.net"
 
 log()  { echo -e "\e[1;32m[INFO]\e[0m $*"; }
 warn() { echo -e "\e[1;33m[WARN]\e[0m $*"; }
@@ -129,8 +129,8 @@ write_resolved_dot() {
 
   cat > "${RESOLVED_DOT_FILE}" <<EOR
 [Resolve]
-DNS=${YANDEX_DNS} ${BACKUP_DNS}
-FallbackDNS=
+DNS=${PRIMARY_DNS}
+FallbackDNS=${FALLBACK_DNS}
 DNSOverTLS=yes
 DNSSEC=no
 EOR
@@ -213,25 +213,25 @@ bash /root/setup-yandex-dot-dns.sh
 
 - `/etc/systemd/resolved.conf.d/10-dot.conf`
   - включает DoT,
-  - задаёт Yandex DNS как основной резолвер,
-  - добавляет Cloudflare как резерв.
+  - задаёт AdGuard + Cloudflare как основные резолверы,
+  - добавляет Yandex DNS как резерв.
 
 ---
 
 ## 4) Варианты профиля Yandex DNS
 
-Если нужно переключиться с Basic на другие режимы Яндекса, меняй значение `YANDEX_DNS` в скрипте:
+Если нужно переключить резервный профиль Яндекса, меняй значение `FALLBACK_DNS` в скрипте:
 
 ### Safe
 
 ```bash
-YANDEX_DNS="77.88.8.88#safe.dot.dns.yandex.net 77.88.8.2#safe.dot.dns.yandex.net"
+FALLBACK_DNS="77.88.8.88#safe.dot.dns.yandex.net 77.88.8.2#safe.dot.dns.yandex.net"
 ```
 
 ### Family
 
 ```bash
-YANDEX_DNS="77.88.8.7#family.dot.dns.yandex.net 77.88.8.3#family.dot.dns.yandex.net"
+FALLBACK_DNS="77.88.8.7#family.dot.dns.yandex.net 77.88.8.3#family.dot.dns.yandex.net"
 ```
 
 ---
