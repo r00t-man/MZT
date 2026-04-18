@@ -82,11 +82,3 @@ sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/hea
 ```
 
 ---
-
-## 🤖 Интеграция с мониторингом (Grafana Telegram Bot)
-
-В репозитории добавлен Telegram-бот мониторинга: `Bots_TG/Grafana_bot`.
-
-- Документация: [Grafana_bot README](../Bots_TG/Grafana_bot/README.md)
-- Бот получает список серверов из Prometheus (таргеты в `/etc/prometheus/prometheus.yml`).
-
