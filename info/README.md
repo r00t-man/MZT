@@ -70,11 +70,3 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server
 Показывает красивый MOTD при входе по SSH: uptime, загрузку, диск, сеть, systemd и Docker.
 
 ---
-
-## 🤖 Новый инструмент в репозитории: Grafana Telegram Bot
-
-Добавлена директория `Bots_TG/Grafana_bot` с ботом мониторинга Grafana/Prometheus.
-
-- README: [Bots_TG/Grafana_bot/README.md](../Bots_TG/Grafana_bot/README.md)
-- Включены инструкции по деплою на сервер и запуску как `systemd`-службы.
-
