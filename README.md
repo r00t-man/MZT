@@ -70,14 +70,6 @@
 
 ---
 
-## 🤖 Bots_TG: Grafana_bot
-
-В репозитории добавлена новая директория: `Bots_TG/Grafana_bot` — Telegram-бот мониторинга для Grafana/Prometheus.
-
-- Документация и запуск: [Bots_TG/Grafana_bot/README.md](./Bots_TG/Grafana_bot/README.md)
-- Бот показывает статус нод, сводку и алерты, а список серверов получает из таргетов Prometheus (конфиг `/etc/prometheus/prometheus.yml`).
-
----
 
 ### 🆕 Новая статья: Dockermon
 

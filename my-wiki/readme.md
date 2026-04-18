@@ -244,11 +244,3 @@ sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/hea
 Если вы не согласны с этими условиями — **прекратите использование данного репозитория**.
 
 ---
-
-## 🤖 Новый раздел: Grafana Telegram Bot
-
-В репозитории появился бот мониторинга: `Bots_TG/Grafana_bot`.
-
-- README бота: [Bots_TG/Grafana_bot/README.md](../Bots_TG/Grafana_bot/README.md)
-- В README описаны: установка Python 3, зависимости, запуск через `venv` и `systemd`.
-
