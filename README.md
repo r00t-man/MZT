@@ -68,6 +68,17 @@
 - 📊 мониторингу серверов через Grafana + Prometheus
 - 🖥️ кастомному SSH MOTD с быстрым обзором состояния сервера
 
+---
+
+## 🤖 Bots_TG: Grafana_bot
+
+В репозитории добавлена новая директория: `Bots_TG/Grafana_bot` — Telegram-бот мониторинга для Grafana/Prometheus.
+
+- Документация и запуск: [Bots_TG/Grafana_bot/README.md](./Bots_TG/Grafana_bot/README.md)
+- Бот показывает статус нод, сводку и алерты, а список серверов получает из таргетов Prometheus (конфиг `/etc/prometheus/prometheus.yml`).
+
+---
+
 ### 🆕 Новая статья: Dockermon
 
 - 📘 Гайд: [Dockermon — интерактивное управление Docker из терминала](./my-wiki/Dockermon%20—%20интерактивное%20управление%20Docker%20из%20терминала.md)
@@ -264,11 +275,4 @@ MZT
 Пользователь обязан соблюдать законодательство своей страны.
 
 ---
-
-## 🤖 Bots_TG: Grafana_bot
-
-В репозитории добавлена новая директория: `Bots_TG/Grafana_bot` — Telegram-бот мониторинга для Grafana/Prometheus.
-
-- Документация и запуск: [Bots_TG/Grafana_bot/README.md](./Bots_TG/Grafana_bot/README.md)
-- Бот показывает статус нод, сводку и алерты, а список серверов получает из таргетов Prometheus (конфиг `/etc/prometheus/prometheus.yml`).
 
