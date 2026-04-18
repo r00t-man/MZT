@@ -80,3 +80,13 @@ bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server
 ```bash
 sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/heads/main/files/scrmenu.sh -o /usr/local/bin/scrmenu && chmod +x /usr/local/bin/scrmenu'
 ```
+
+---
+
+## 🤖 Интеграция с мониторингом (Grafana Telegram Bot)
+
+В репозитории добавлен Telegram-бот мониторинга: `Bots_TG/Grafana_bot`.
+
+- Документация: [Grafana_bot README](../Bots_TG/Grafana_bot/README.md)
+- Бот получает список серверов из Prometheus (таргеты в `/etc/prometheus/prometheus.yml`).
+

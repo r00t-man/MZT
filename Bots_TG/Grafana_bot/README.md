@@ -4,6 +4,153 @@
 
 ---
 
+## 🚀 Быстрый деплой на сервер
+
+### 1) Клонирование репозитория
+
+```bash
+git clone https://github.com/r00t-man/MZT.git
+cd MZT/Bots_TG/Grafana_bot
+```
+
+Если хотите сразу развернуть в `/opt`:
+
+```bash
+sudo mkdir -p /opt/grafana_bot
+sudo chown -R $USER:$USER /opt/grafana_bot
+git clone https://github.com/r00t-man/MZT.git /opt/grafana_bot_repo
+cp -a /opt/grafana_bot_repo/Bots_TG/Grafana_bot/. /opt/grafana_bot/
+cd /opt/grafana_bot
+```
+
+### 2) Установка Python 3 (если не установлен)
+
+Проверка версии:
+
+```bash
+python3 --version
+```
+
+Ubuntu / Debian:
+
+```bash
+sudo apt update
+sudo apt install -y python3 python3-venv python3-pip
+```
+
+### 3) Зависимости Python
+
+Боту нужны библиотеки:
+
+- `python-telegram-bot`
+- `requests`
+- `python-dotenv`
+- `urllib3`
+
+Установка в виртуальном окружении:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install --upgrade pip
+pip install python-telegram-bot requests python-dotenv urllib3
+```
+
+### 4) Настройка `.env`
+
+Создайте файл `.env` рядом с папками `bot/` и `data/` и укажите минимум:
+
+```env
+BOT_TOKEN=...
+PROMETHEUS_URL=http://127.0.0.1:9090
+ALERT_CHAT_IDS=...
+ADMIN_IDS=...
+```
+
+### 5) Запуск вручную
+
+```bash
+source venv/bin/activate
+python -m bot.main
+```
+
+---
+
+## ⚙️ Запуск как systemd service
+
+Пример юнита:
+
+`/etc/systemd/system/grafana-bot.service`
+
+```ini
+[Unit]
+Description=Grafana Telegram Bot
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/grafana_bot
+
+# подтягиваем .env
+EnvironmentFile=/opt/grafana_bot/.env
+
+# важно: путь к python из venv
+ExecStart=/opt/grafana_bot/venv/bin/python -m bot.main
+
+Restart=always
+RestartSec=5
+
+# логирование
+StandardOutput=journal
+StandardError=journal
+
+# защита от зависаний
+TimeoutStopSec=10
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Применение:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now grafana-bot.service
+sudo systemctl status grafana-bot.service
+```
+
+Логи:
+
+```bash
+journalctl -u grafana-bot.service -f
+```
+
+### Если бот НЕ в `/opt/grafana_bot`
+
+Нужно заменить пути в 3 местах:
+
+- `WorkingDirectory=`
+- `EnvironmentFile=`
+- `ExecStart=`
+
+Пример, если директория `/home/ubuntu/apps/grafana_bot`:
+
+```ini
+WorkingDirectory=/home/ubuntu/apps/grafana_bot
+EnvironmentFile=/home/ubuntu/apps/grafana_bot/.env
+ExecStart=/home/ubuntu/apps/grafana_bot/venv/bin/python -m bot.main
+```
+
+---
+
+## 📥 Откуда берётся список серверов
+
+Бот получает список серверов (нод) из Prometheus — фактически из таргетов, которые описаны в `/etc/prometheus/prometheus.yml` на стороне сервера Prometheus.
+
+То есть чтобы новая нода появилась в боте, её нужно добавить в `prometheus.yml` (в нужный `scrape_config`) и перезагрузить/перечитать конфиг Prometheus.
+
+---
+
 ## 1) Назначение проекта
 
 `grafana_bot` — Telegram-бот для оперативного мониторинга серверов (нод), который:
