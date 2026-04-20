@@ -1,3 +1,74 @@
+# Профиль Remnawave `block-ru-v2-json`
+
+Этот профиль предназначен для запуска **VLESS + XHTTP + TLS** в Remnawave и одновременно выполняет роль фильтра: пропускает обычный трафик, режет рекламу и блокирует российские домены/подсети по заданным правилам.
+
+## Что делает этот конфиг
+
+- поднимает входящее подключение на `443/tcp` по протоколу `vless`;
+- использует транспорт `xhttp` поверх `tls` (маскировка под обычный HTTPS-трафик);
+- пишет `access` и `error` логи в `/var/log/remnanode`;
+- использует DNS-резолверы и стратегию `UseIPv4`;
+- отправляет обычный трафик в `DIRECT`, а нежелательный — в `BLOCK` (`blackhole`);
+- блокирует:
+  - рекламные домены из `geosite:category-ads-all`;
+  - список конкретных `.ru`/российских сервисов в правилах;
+  - все домены зон `.ru`, `.su`, `.рф` (`xn--p1ai`);
+  - IP-диапазоны `geoip:ru`.
+
+## Что и для чего прописано в секциях
+
+- `log` — пути к логам и уровень логирования (`warning`).
+- `dns` — DNS-серверы и стратегия запросов (`UseIPv4`).
+- `inbounds` — точка входа клиента:
+  - `protocol: vless`, `port: 443`, `listen: 0.0.0.0`;
+  - `sniffing` распознаёт тип трафика (`http/tls/quic`) для корректной маршрутизации;
+  - `streamSettings` задаёт `xhttp + tls`;
+  - `tlsSettings` — домен, сертификаты, версии TLS;
+  - `xhttpSettings` — параметры HTTP-обёртки (host/path/buffering и т.д.).
+- `outbounds`:
+  - `DIRECT` (`freedom`) — разрешённый трафик;
+  - `BLOCK` (`blackhole`) — трафик, который нужно отбросить.
+- `routing.rules` — логика маршрутизации и блокировок.
+
+> Важно: замените в конфиге значения `ЗАМЕНИ СВОЙ ДОМЕН` и пути к сертификатам (`privkey.key`, `fullchain.pem`) на ваши реальные.
+
+## Чтобы логирование работало в Docker
+
+Нужно заранее создать папку логов на хосте и примонтировать её в контейнер.
+
+### 1) Создать каталог логов на хосте
+
+```bash
+mkdir -p /var/log/remnanode
+chmod 755 /var/log/remnanode
+```
+
+### 2) Добавить монтирование логов в `docker-compose.yml`
+
+По сути конфиг стандартный — важно добавить последнюю строку в `volumes`.
+
+```yaml
+services:
+  remnanode:
+    container_name: remnanode
+    hostname: remnanode
+    image: remnawave/node:latest
+    network_mode: host
+    restart: always
+    cap_add:
+      - NET_ADMIN
+    ulimits:
+      nofile:
+        soft: 1048576
+        hard: 1048576
+    environment:
+      - NODE_PORT=2222
+      - SECRET_KEY="..."
+    volumes:
+      - /var/log/remnanode:/var/log/remnanode
+```
+
+---
 
 ```json
 {
