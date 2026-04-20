@@ -118,17 +118,17 @@ services:
           ],
           "maxVersion": "1.3",
           "minVersion": "1.2",
-          "serverName": "ЗАМЕНИ СВОЙ ДОМЕН",
+          "serverName": "⚠️ЗАМЕНИ СВОЙ ДОМЕН⚠️",
           "certificates": [
             {
-              "keyFile": "/root/cert/ТВОЙ СЕРТ ЗАМЕНИ/privkey.key",
-              "certificateFile": "/root/cert/ТВОЙ СЕРТ ЗАМЕНИ/fullchain.pem"
+              "keyFile": "⚠️/root/cert/⚠️ТВОЙ СЕРТ ЗАМЕНИ⚠️/privkey.key⚠️",
+              "certificateFile": "⚠️/root/cert/⚠️ТВОЙ СЕРТ ЗАМЕНИ⚠️/fullchain.pem⚠️"
             }
           ],
           "rejectUnknownSni": false
         },
         "xhttpSettings": {
-          "host": "ЗАМЕНИ СВОЙ ДОМЕН",
+          "host": "⚠️ЗАМЕНИ СВОЙ ДОМЕН⚠️",
           "mode": "auto",
           "path": "/",
           "headers": {},
