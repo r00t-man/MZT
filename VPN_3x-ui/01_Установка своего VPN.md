@@ -123,24 +123,11 @@ apt install -y nano mc htop lsof iperf3 curl dos2unix openssl systemd fail2ban n
 
 ## 🚀 2. Установка и настройка 3X-UI
 
-Устанавливаем 3X-UI с панелью и самоподписанными сертификатами на 10 лет:
+Устанавливаем 3X-UI с панелью:
 
 ```bash
-curl -fsSL -o ~/00_Cert_VPN_stable_version.sh https://raw.githubusercontent.com/soulpastwk/share/main/VPN/0_Install/00_Cert_VPN_stable_version.sh \
-&& dos2unix ~/00_Cert_VPN_stable_version.sh 2>/dev/null || true \
-&& chmod +x ~/00_Cert_VPN_stable_version.sh \
-&& bash ~/00_Cert_VPN_stable_version.sh
+bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
 ```
-
-### Что делает скрипт:
-
-1. Проверяет наличие `openssl` и `x-ui`.
-2. Устанавливает **3X-UI**.
-3. Создаёт самоподписанный сертификат с маскировкой под выбранный сервис (Google, Yandex, и др.).
-  * (Yandex - для серверов в России / Google - для всех остальных)
-  * Сервер в России понадобится нам только для каскадного VPN, который описан отдельно будет.
-5. Включает автозапуск панели.
-6. Показывает **логин, пароль и порт панели (случайный)**.
 
 ⚠️ **Важно:** порты веб-панели и сервисов становятся известны только после установки.
 Запомните/запишите их — они нужны для настройки фаервола в будущем.
@@ -155,23 +142,6 @@ curl -fsSL -o ~/00_Cert_VPN_stable_version.sh https://raw.githubusercontent.com/
 
 - Если нажать **`n`** → порт будет выбран автоматически (рекомендуется).  
 - Если нажать **`y`** → можно задать свой порт, но его всегда можно изменить позже в панели управления.
-
-<p align="center"><strong>============================================================================== </strong></p>
-
-![sc-02](https://github.com/soulpastwk/share/blob/main/media/vpn00/sc-02.png)
-<p align="center"><strong>============================================================================== </strong></p>
-
-Скрипт продолжит работу где у нас спросят под что мы будем маскироваться выбираем: 
-
-- Только Google - для обычного VPN .  
-- Yandex - для каскадного VPN.
-
-Так же спросит каким методом будем шифровать...
-
-<p align="center"><strong>============================================================================== </strong></p>
-
-![sc-03](https://github.com/soulpastwk/share/blob/main/media/vpn00/sc-03.png)
-<p align="center"><strong>============================================================================== </strong></p>
 
 ## 🔑 Авторизация в панели
 
