@@ -1,0 +1,49 @@
+{
+  "permissions": {
+    "defaultMode": "default",
+    "additionalDirectories": ["/srv", "/var/log"],
+    "allow": [
+      "Read", "Glob", "Grep",
+      "Bash(docker ps:*)", "Bash(docker logs:*)", "Bash(docker inspect:*)",
+      "Bash(docker stats:*)", "Bash(docker top:*)", "Bash(docker port:*)",
+      "Bash(docker images:*)", "Bash(docker version)", "Bash(docker info)",
+      "Bash(docker system df:*)", "Bash(docker network ls:*)", "Bash(docker network inspect:*)",
+      "Bash(docker volume ls:*)", "Bash(docker volume inspect:*)",
+      "Bash(docker compose ps:*)", "Bash(docker compose logs:*)",
+      "Bash(docker compose config:*)", "Bash(docker compose top:*)",
+      "Bash(systemctl status:*)", "Bash(systemctl list-units:*)", "Bash(systemctl list-timers:*)",
+      "Bash(systemctl is-active:*)", "Bash(systemctl is-enabled:*)",
+      "Bash(systemctl cat:*)", "Bash(systemctl show:*)",
+      "Bash(journalctl:*)",
+      "Bash(ss:*)", "Bash(ip:*)", "Bash(dig:*)", "Bash(host:*)", "Bash(nslookup:*)",
+      "Bash(ping:*)", "Bash(traceroute:*)", "Bash(mtr:*)",
+      "Bash(curl -I:*)", "Bash(curl -sI:*)", "Bash(curl -sSI:*)", "Bash(curl -v:*)", "Bash(curl -o /dev/null:*)",
+      "Bash(openssl s_client:*)", "Bash(openssl x509:*)", "Bash(openssl verify:*)",
+      "Bash(df:*)", "Bash(free:*)", "Bash(uptime)", "Bash(vmstat:*)", "Bash(iostat:*)",
+      "Bash(ps:*)", "Bash(top -b:*)", "Bash(uname:*)", "Bash(lsblk:*)", "Bash(du:*)",
+      "Bash(ls:*)", "Bash(cat:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(grep:*)",
+      "Bash(rg:*)", "Bash(find:*)", "Bash(stat:*)", "Bash(wc:*)", "Bash(jq:*)",
+      "Bash(awk:*)", "Bash(sed -n:*)",
+      "Bash(nginx -t)"
+    ],
+    "deny": [
+      "Read(/opt/certs/*_privkey.key)", "Read(//*.key)", "Read(//.env)", "Read(//.env.*)",
+      "Read(/opt/certs/.htpasswd*)", "Read(//authorized_keys)",
+      "Edit(/opt/certs/**)", "Write(/opt/certs/**)",
+      "Edit(//.env)", "Write(//.env)", "Edit(//authorized_keys)",
+      "Edit(/etc/ssh/**)", "Write(/etc/ssh/**)",
+      "Bash(rm -rf:*)", "Bash(rm -fr:*)",
+      "Bash(ufw:*)", "Bash(iptables:*)", "Bash(ip6tables:*)",
+      "Bash(docker compose down -v:*)", "Bash(docker volume rm:*)", "Bash(docker volume prune:*)",
+      "Bash(docker system prune:*)", "Bash(docker network rm:*)",
+      "Bash(do-release-upgrade:*)", "Bash(apt full-upgrade:*)", "Bash(apt-get full-upgrade:*)",
+      "Bash(apt dist-upgrade:*)", "Bash(apt-get dist-upgrade:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      { "matcher": "Bash", "hooks": [ { "type": "command", "command": "/opt/.claude/hooks/guard.sh" } ] },
+      { "matcher": "Edit|Write|Read|MultiEdit|NotebookEdit", "hooks": [ { "type": "command", "command": "/opt/.claude/hooks/guard.sh" } ] }
+    ]
+  }
+}
