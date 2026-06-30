@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Ultra Clean VPS v2 — безопасная глубокая очистка Ubuntu 24.04
-# Оптимизирован для production серверов с Docker (remnanode и др.)
+# Ultra Clean VPS v3 — безопасная глубокая очистка Ubuntu 24.04
+# Оптимизирован для production серверов с Docker и nginx (remnanode и др.)
 # https://github.com/r00t-man/MZT
 
 set -euo pipefail
@@ -17,6 +17,13 @@ if [ "$(id -u)" -ne 0 ]; then
   exit 1
 fi
 
+DISK_BEFORE=$(df -h / | awk 'NR==2 {print $3 " / " $2 " (avail: " $4 ")"}')
+echo ""
+echo "══════════════════════════════"
+echo "  Ultra Clean VPS v3"
+echo "  Диск ДО: $DISK_BEFORE"
+echo "══════════════════════════════"
+
 # ──────────────────────────────────────────────────────────────
 log "1. APT: очистка кешей"
 # ──────────────────────────────────────────────────────────────
@@ -29,7 +36,6 @@ ok "APT кеш очищен"
 # ──────────────────────────────────────────────────────────────
 log "2. Journald: постоянные лимиты + очистка"
 # ──────────────────────────────────────────────────────────────
-# Создаём persistent config — vacuum сбрасывается после перезагрузки
 mkdir -p /etc/systemd/journald.conf.d
 cat > /etc/systemd/journald.conf.d/limits.conf << 'EOF'
 [Journal]
@@ -50,13 +56,11 @@ apt-get update -qq
 ok "APT индексы пересобраны"
 
 # ──────────────────────────────────────────────────────────────
-log "4. Большие архивные логи (>100MB)"
+log "4. Архивные логи /var/log (*.gz, *.log.N >50MB)"
 # ──────────────────────────────────────────────────────────────
-# Удаляем только ротированные копии (.log.1, .log.2.gz и т.д.)
-# Текущие .log файлы не трогаем
-echo "  Ищем большие архивные логи..."
+echo "  Ищем большие архивные логи (>50MB)..."
 find /var/log -maxdepth 3 \( -name "*.log.[0-9]*" -o -name "*.gz" \) \
-     -size +100M 2>/dev/null | while read -r f; do
+     -size +50M 2>/dev/null | while read -r f; do
   SIZE=$(du -h "$f" 2>/dev/null | cut -f1)
   rm -f "$f"
   ok "Удалён $f ($SIZE)"
@@ -64,47 +68,66 @@ done
 ok "Проверка архивных логов завершена"
 
 # ──────────────────────────────────────────────────────────────
-log "5. Nginx: настройка логротации (защита от разрастания)"
+log "5. Nginx: немедленная очистка накопившихся логов"
+# ──────────────────────────────────────────────────────────────
+if [ -d /var/log/nginx ]; then
+  NGINX_BEFORE=$(du -sh /var/log/nginx/ 2>/dev/null | cut -f1)
+  echo "  До: $NGINX_BEFORE"
+
+  # ротированные сжатые — удаляем все
+  find /var/log/nginx -type f -name "*.gz" -delete 2>/dev/null || true
+
+  # *.log.2, *.log.3, ... — удаляем
+  find /var/log/nginx -type f -regextype posix-extended \
+      -regex ".+\.log\.[2-9][0-9]*$" -delete 2>/dev/null || true
+
+  # *.log.1 крупнее 100M — вчерашний лог, уже ротирован, не нужен
+  find /var/log/nginx -type f -name "*.log.1" -size +100M -delete 2>/dev/null || true
+
+  NGINX_AFTER=$(du -sh /var/log/nginx/ 2>/dev/null | cut -f1)
+  echo "  После: $NGINX_AFTER"
+  echo "  Остаток:"
+  ls -lh /var/log/nginx/ 2>/dev/null | awk 'NR>1 {printf "    %-10s %s\n", $5, $9}'
+  ok "Nginx логи очищены"
+else
+  skip "Нет /var/log/nginx"
+fi
+
+# ──────────────────────────────────────────────────────────────
+log "6. Nginx: настройка логротации (защита от разрастания)"
 # ──────────────────────────────────────────────────────────────
 if [ -f /etc/logrotate.d/nginx ]; then
   cat > /etc/logrotate.d/nginx << 'EOF'
 /var/log/nginx/*.log {
     daily
     missingok
-    rotate 3
+    rotate 2
     compress
     delaycompress
     notifempty
-    size 200M
+    size 100M
     create 0640 www-data adm
     sharedscripts
-    prerotate
-        if [ -d /etc/logrotate.d/httpd-prerotate ]; then \
-            run-parts /etc/logrotate.d/httpd-prerotate; \
-        fi \
-    endscript
     postrotate
-        invoke-rc.d nginx rotate >/dev/null 2>&1
+        [ -s /run/nginx.pid ] && kill -USR1 $(cat /run/nginx.pid) 2>/dev/null || true
     endscript
 }
 EOF
-  ok "nginx logrotate: 3 дня, ротация при 200MB (было 14 дней)"
+  ok "nginx logrotate: 2 ротации, ротация при 100MB или раз в сутки"
 else
-  skip "nginx не установлен"
+  skip "nginx не установлен (/etc/logrotate.d/nginx отсутствует)"
 fi
 
 # ──────────────────────────────────────────────────────────────
-log "6. Docker: безопасная очистка"
+log "7. Docker: безопасная очистка"
 # ──────────────────────────────────────────────────────────────
 if command -v docker >/dev/null 2>&1; then
   echo "  Состояние до очистки:"
   docker system df 2>/dev/null || true
   echo ""
 
-  # ВАЖНО: без флага -a
-  # docker system prune -a удаляет ВСЕ неиспользуемые образы — опасно на prod
-  # docker system prune (без -a) удаляет только dangling images, stopped containers,
-  # unused networks, build cache — образы активных контейнеров остаются
+  # без -a: удаляем dangling images, stopped containers, unused networks, build cache
+  # образы запущенных контейнеров НЕ трогаем
   docker system prune -f
   docker image prune -f || true
 
@@ -117,7 +140,7 @@ else
 fi
 
 # ──────────────────────────────────────────────────────────────
-log "7. Docker: постоянные лимиты логов"
+log "8. Docker: постоянные лимиты логов + усечение раздувшихся"
 # ──────────────────────────────────────────────────────────────
 if command -v docker >/dev/null 2>&1; then
   mkdir -p /etc/docker
@@ -136,18 +159,27 @@ JSON
   else
     skip "Docker log limits уже настроены в daemon.json"
   fi
+
+  # Усечь уже раздувшиеся json-логи существующих контейнеров (>100MB)
+  echo "  Проверяем логи запущенных контейнеров..."
+  find /var/lib/docker/containers/ -name "*-json.log" -size +100M 2>/dev/null \
+    | while read -r logfile; do
+        SIZE=$(du -h "$logfile" 2>/dev/null | cut -f1)
+        : > "$logfile"
+        ok "Усечён лог контейнера: $(basename "$(dirname "$logfile")") ($SIZE → 0)"
+      done
 else
   skip "Docker не установлен"
 fi
 
 # ──────────────────────────────────────────────────────────────
-log "8. Документация и man-страницы"
+log "9. Документация и man-страницы"
 # ──────────────────────────────────────────────────────────────
 rm -rf /usr/share/doc/* /usr/share/man/*
 ok "Документация удалена (~100-300MB)"
 
 # ──────────────────────────────────────────────────────────────
-log "9. Snap (Ubuntu VPS)"
+log "10. Snap (Ubuntu VPS)"
 # ──────────────────────────────────────────────────────────────
 if dpkg -l 2>/dev/null | grep -q '^ii\s\+snapd\s'; then
   systemctl stop snapd.socket snapd.service 2>/dev/null || true
@@ -161,7 +193,7 @@ else
 fi
 
 # ──────────────────────────────────────────────────────────────
-log "10. Локали (оставляем en_US + ru_RU)"
+log "11. Локали (оставляем en_US + ru_RU)"
 # ──────────────────────────────────────────────────────────────
 export DEBIAN_FRONTEND=noninteractive
 if ! command -v localepurge >/dev/null 2>&1; then
@@ -177,7 +209,7 @@ localepurge || true
 ok "Локали: оставлены en_US, en_GB, ru_RU (~200-500MB)"
 
 # ──────────────────────────────────────────────────────────────
-log "11. Firmware (только для VPS, не для bare-metal!)"
+log "12. Firmware (только для VPS, не для bare-metal!)"
 # ──────────────────────────────────────────────────────────────
 if dpkg -l 2>/dev/null | grep -q '^ii\s\+linux-firmware\s'; then
   apt-get purge -y linux-firmware || true
@@ -188,7 +220,7 @@ else
 fi
 
 # ──────────────────────────────────────────────────────────────
-log "12. Старые ядра (оставляем текущее + последнее)"
+log "13. Старые ядра (оставляем текущее + последнее)"
 # ──────────────────────────────────────────────────────────────
 CURRENT_KERNEL="$(uname -r)"
 KERNEL_PKGS="$(dpkg -l 2>/dev/null | awk '/^ii  linux-image-[0-9]/ {print $2}')"
@@ -210,7 +242,7 @@ fi
 ok "Старые ядра очищены"
 
 # ──────────────────────────────────────────────────────────────
-log "13. Временные файлы"
+log "14. Временные файлы"
 # ──────────────────────────────────────────────────────────────
 rm -rf /tmp/* /var/tmp/* 2>/dev/null || true
 ok "Временные файлы удалены"
@@ -218,11 +250,13 @@ ok "Временные файлы удалены"
 # ──────────────────────────────────────────────────────────────
 log "ФИНАЛЬНЫЙ ОТЧЁТ"
 # ──────────────────────────────────────────────────────────────
+DISK_AFTER=$(df -h / | awk 'NR==2 {print $3 " / " $2 " (avail: " $4 ")"}')
+
 echo ""
-echo "Диск:"
-df -h /
+echo "  Диск ДО:    $DISK_BEFORE"
+echo "  Диск ПОСЛЕ: $DISK_AFTER"
 echo ""
-echo "Топ-15 директорий:"
+echo "Топ-15 директорий по размеру:"
 du -xh --max-depth=2 / 2>/dev/null | sort -rh | head -15
 echo ""
 if command -v docker >/dev/null 2>&1; then
