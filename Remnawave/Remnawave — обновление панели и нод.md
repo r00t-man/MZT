@@ -1,22 +1,54 @@
 # 🔄 Remnawave — Обновление панели и нод
 
-Полная инструкция по безопасному обновлению Remnawave: панель (Docker), ноды (remnanode), и исправление типовых ошибок после апдейта.
+Полное руководство по безопасному обновлению Remnawave: панель (Docker), remnanode, и разбор всех типичных ошибок после апдейта.
+
+---
+
+## ⚡ Быстрая шпаргалка
+
+| Задача | Скрипт | Что делает |
+|--------|--------|-----------|
+| Обновить панель | `update_remnawave.sh` | pull + up -d + nginx restart |
+| Обновить все ноды | `update_nodes.sh` | параллельный docker pull на каждой ноде |
+| Обновить панель + ноды | `update_remnawave.sh --nodes` | оба за один запуск |
+
+```bash id="qs1x1z"
+# Панель (бэкап + pull + restart nginx)
+bash <(curl -s https://raw.githubusercontent.com/r00t-man/MZT/main/files/update_remnawave.sh)
+
+# Ноды — все
+bash <(curl -s https://raw.githubusercontent.com/r00t-man/MZT/main/files/update_nodes.sh)
+
+# Конкретные ноды
+bash update_nodes.sh node-se node-nl node-ee1
+```
 
 ---
 
 ## 🚀 Общая схема
 
 ```text
-docker compose pull   ← новые образы
-        ↓
-docker compose up -d  ← рестарт с новым образом
-        ↓
-docker restart nginx  ← сброс DNS-кеша (ОБЯЗАТЕЛЬНО!)
-        ↓
-проверка статуса нод
+┌─────────────────────────────────────────────┐
+│              ОБНОВЛЕНИЕ ПАНЕЛИ               │
+├─────────────────────────────────────────────┤
+│  1. Бэкап .env + дамп PostgreSQL            │
+│  2. docker compose pull   ← новые образы    │
+│  3. docker compose up -d  ← рестарт         │
+│  4. sleep 15-20           ← ждём PM2        │
+│  5. docker restart nginx  ← ОБЯЗАТЕЛЬНО ⚠️  │
+│  6. curl проверка API     ← HTTP 200        │
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│              ОБНОВЛЕНИЕ НОД                  │
+├─────────────────────────────────────────────┤
+│  Автоматически: конфиг Xray пушит панель    │
+│  Вручную (редко): docker compose pull+up    │
+│  Скрипт: update_nodes.sh (параллельно)      │
+└─────────────────────────────────────────────┘
 ```
 
-> ⚠️ **Критический момент:** После перезапуска контейнер `remnawave` получает **новый внутренний IP** в Docker-сети. Nginx кеширует старый IP и начинает отдавать `502 Bad Gateway`. Перезапуск nginx — обязательный шаг.
+> ⚠️ **Главный нюанс панели:** При `docker compose up -d` контейнер `remnawave` получает **новый внутренний IP** в Docker-сети. Nginx кешировал старый — начинает отдавать `502 Bad Gateway`. **Перезапуск nginx — обязательный шаг.**
 
 ---
 
@@ -31,11 +63,11 @@ docker restart nginx  ← сброс DNS-кеша (ОБЯЗАТЕЛЬНО!)
 
 ---
 
-## 🐳 Контейнеры
+## 🐳 Контейнеры панели
 
 | Контейнер | Назначение |
 |-----------|------------|
-| `remnawave` | основное приложение (API, PM2) |
+| `remnawave` | основное приложение (NestJS + PM2) |
 | `remnawave-db` | PostgreSQL |
 | `remnawave-redis` | Redis |
 | `remnawave-nginx` | реверс-прокси (SSL-терминация) |
@@ -45,11 +77,13 @@ docker restart nginx  ← сброс DNS-кеша (ОБЯЗАТЕЛЬНО!)
 
 ## 🛡️ 1. Бэкап перед обновлением
 
+> ⚠️ Всегда делать перед мажорными обновлениями. При минорных патчах — по желанию.
+
 ```bash id="bk1x9z"
 DATE=$(date +%F-%H%M%S)
 mkdir -p /srv/backup_opt
 
-# бэкап .env и конфигов
+# бэкап конфигурации
 cp /opt/remnawave/.env /srv/backup_opt/remnawave_env_$DATE
 cp -a /opt/remnawave/nginx/ /srv/backup_opt/remnawave_nginx_$DATE
 
@@ -63,7 +97,7 @@ echo "✅ Бэкап: /srv/backup_opt/remnawave_db_$DATE.sql"
 
 ---
 
-## 📥 2. Обновление образов
+## 📥 2. Обновление образов панели
 
 ```bash id="pu2w7a"
 cd /opt/remnawave
@@ -81,14 +115,14 @@ docker compose up -d
 
 ---
 
-## ⏳ 4. Подождать старта (10–15 сек)
+## ⏳ 4. Ожидание старта (15–20 сек)
 
 ```bash id="wt4m2c"
-sleep 15
+sleep 20
 docker logs remnawave --tail=10
 ```
 
-Убедись что в логах видно:
+Ищем в логах:
 
 ```
 [NestApplication]   Nest application successfully started
@@ -102,7 +136,7 @@ docker logs remnawave --tail=10
 docker restart remnawave-nginx
 ```
 
-> 💡 **Почему это обязательно:** При каждом рестарте контейнер `remnawave` получает новый IP в Docker-сети. Nginx резолвит DNS при старте и кеширует IP. Без перезапуска nginx будет ходить на старый (несуществующий) адрес → `502 Bad Gateway`.
+> 💡 **Почему это обязательно:** При каждом рестарте контейнер `remnawave` получает новый IP в Docker overlay-сети. Nginx резолвит имя `remnawave` через DNS Docker при старте и кеширует IP. Без рестарта nginx будет ходить на старый (несуществующий) адрес → `502 Bad Gateway`.
 
 ---
 
@@ -113,26 +147,82 @@ docker restart remnawave-nginx
 docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" | grep remnawave
 
 # проверка API
-curl -s -o /dev/null -w "%{http_code}" https://panel.example.com/api
+curl -s -o /dev/null -w "%{http_code}" https://<YOUR_PANEL_DOMAIN>/api
 ```
 
 Ожидаемый результат: `200`
 
 ---
 
-## 🤖 Автоматический скрипт
+## 🤖 Автоматический скрипт панели
 
-Все шаги в одной команде:
+Все шаги в одной команде (бэкап + pull + рестарт + проверка):
 
 ```bash id="sc7g5h"
 bash <(curl -s https://raw.githubusercontent.com/r00t-man/MZT/main/files/update_remnawave.sh)
 ```
 
-Или запустить локально (если скрипт уже скачан):
+Локальный запуск:
 
 ```bash id="sc7loc"
-bash /opt/github/MZT/files/update_remnawave.sh
+bash /path/to/update_remnawave.sh
 ```
+
+Флаги:
+
+| Флаг | Действие |
+|------|----------|
+| без флагов | только панель |
+| `--nodes` | панель + все ноды (последовательно) |
+
+---
+
+## 🖥️ Обновление нод (remnanode)
+
+### Как это устроено
+
+- **Конфигурация Xray** — обновляется **автоматически** через панель. После изменения конфига Remnawave сам пушит новый `config.json` на ноды и перезапускает Xray.
+- **Бинарь remnanode** — обновляется вручную командой `docker compose pull` на каждой ноде.
+
+Ручное обновление нужно только при мажорных релизах с новой версией remnanode image.
+
+---
+
+### Обновить одну ноду
+
+```bash id="nd1u3e"
+ssh node-XX
+
+# текущая версия
+docker inspect remnanode --format '{{.Config.Image}}'
+
+# обновить
+cd /opt/remnanode
+docker compose pull
+docker compose up -d
+
+# проверить
+docker logs remnanode --tail=10
+```
+
+---
+
+### Массовое обновление всех нод (скрипт)
+
+```bash id="nd2m4f"
+# Все ноды (берёт Host node-* из ~/.ssh/config)
+bash <(curl -s https://raw.githubusercontent.com/r00t-man/MZT/main/files/update_nodes.sh)
+
+# Конкретные ноды
+bash update_nodes.sh node-se node-nl node-ee1
+
+# Исключить ноду
+EXCLUDE="node-de1" bash update_nodes.sh
+```
+
+Скрипт запускает обновление **параллельно** на всех нодах и выводит итоговый отчёт.
+
+> 💡 **Примечание:** Ноды без remnanode (например, серверы только с node_exporter) нужно исключить через `EXCLUDE=`.
 
 ---
 
@@ -142,6 +232,8 @@ bash /opt/github/MZT/files/update_remnawave.sh
 
 ```bash id="rb1e2w"
 cp /srv/backup_opt/remnawave_env_ДАТА /opt/remnawave/.env
+cd /opt/remnawave && docker compose up -d
+docker restart remnawave-nginx
 ```
 
 ### Восстановить БД
@@ -155,14 +247,12 @@ docker exec -i remnawave-db \
 ### Откатить образ
 
 ```bash id="rb3i4y"
-cd /opt/remnawave
-
-# посмотреть доступные теги
+# Посмотреть доступные образы
 docker images remnawave
 
-# откатиться на конкретный образ — правь image: в docker-compose.yml
+# Указать конкретный тег в docker-compose.yml → image: remnawave/remnawave:x.y.z
+cd /opt/remnawave
 docker compose up -d
-
 docker restart remnawave-nginx
 ```
 
@@ -172,137 +262,127 @@ docker restart remnawave-nginx
 
 ### ❌ 502 Bad Gateway после обновления
 
-**Причина:** nginx кешировал старый внутренний IP контейнера.
+**Причина:** nginx кешировал старый внутренний IP контейнера `remnawave`.
 
 **Диагностика:**
-
 ```bash id="dg1a5z"
-docker logs remnawave-nginx --tail=10 | grep "Connection refused"
+docker logs remnawave-nginx --tail=10 | grep "connect() failed"
 ```
 
 **Решение:**
-
 ```bash id="fx1b6k"
 docker restart remnawave-nginx
 ```
 
 ---
 
-### ❌ Ноды показывают ECONNREFUSED в логах панели
+### ❌ Ноды показывают ECONNREFUSED / отключились
 
-**Причина:** remnanode на нодах потерял связь с панелью во время даунтайма и стал `inactive`.
+**Причина:** Во время даунтайма панели remnanode на нодах потерял соединение — это **нормально**.
 
-**Диагностика:**
+**Ожидаемое поведение:** Панель автоматически переподключается к нодам и перезапускает Xray в течение **1–2 минут** после старта.
 
+**Если нода не поднялась через 3 минуты:**
 ```bash id="dg2n7m"
-docker logs remnawave --tail=20 | grep "ECONNREFUSED\|health check"
-```
+# Проверить логи на ноде
+ssh node-XX "docker logs remnanode --tail=20"
 
-**Решение:** ноды **восстанавливаются автоматически** — панель сама переподключается и перезапускает Xray на нодах в течение 1–2 минут после старта.
-
-Если нода так и не поднялась — зайди на неё и проверь:
-
-```bash id="fx2n8p"
-ssh node-XX "docker ps | grep remnanode && docker logs remnanode --tail=10"
+# Проверить статус контейнера
+ssh node-XX "docker ps | grep remnanode"
 ```
 
 ---
 
-### ❌ `Reverse proxy and HTTPS are required` в логах remnawave
+### ❌ Контейнер remnawave не стартует (crash loop)
 
-**Причина:** запрос дошёл до remnawave без заголовка `X-Forwarded-Proto: https`. Бывает при прямом обращении к порту 3000 или неправильном nginx-конфиге.
+```bash id="dg5c2d"
+# Смотреть логи
+docker logs remnawave --tail=50
 
-**Решение:** убедись что в nginx-конфиге для панели есть:
-
-```nginx id="ng3x9q"
-proxy_set_header X-Forwarded-Proto $scheme;
-proxy_set_header X-Forwarded-Host   $host;
+# Проверить корректность ENV
+docker compose config
 ```
 
-Если запрос идёт через HTTP-локалхост (напр. из скриптов) — это норма, ошибка в логах не критична.
+**Частые причины:**
+- В мажорном обновлении появились **новые обязательные переменные** в `.env` — сравни с `.env.example` в репозитории
+- `remnawave-db` не успел стартовать — подожди 10 сек и повтори `docker compose up -d`
+- Ошибка синтаксиса в `.env` — проверь кавычки и спецсимволы
 
 ---
 
 ### ❌ API панели недоступен (бот пишет ошибку)
 
-**Быстрая диагностика:**
-
 ```bash id="dg4a1b"
-# статус контейнеров
+# Статус контейнеров
 docker ps --format "table {{.Names}}\t{{.Status}}"
 
-# прямая проверка API
-curl -s -o /dev/null -w "%{http_code}" https://panel.example.com/api
+# Прямая проверка API
+curl -s -o /dev/null -w "%{http_code}" https://<YOUR_PANEL_DOMAIN>/api
 
-# что видит nginx
+# Что видит nginx
 docker logs remnawave-nginx --tail=5
 
-# что происходит внутри remnawave
+# Что происходит внутри remnawave
 docker logs remnawave --tail=20 | grep -E "ERROR|started|listening"
 ```
 
 ---
 
-### ❌ Контейнер не стартует (crash loop)
+### ❌ `Reverse proxy and HTTPS are required` в логах
 
-```bash id="dg5c2d"
-docker logs remnawave --tail=50
+**Причина:** Запрос дошёл до remnawave без заголовка `X-Forwarded-Proto: https`. При прямом обращении к порту 3000 — норма.
 
-# проверь ENV на синтаксические ошибки
-docker compose config
+**Решение:** В nginx-конфиге для панели должны быть:
+```nginx id="ng3x9q"
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Forwarded-Host   $host;
 ```
-
-Частые причины:
-- новые обязательные переменные в `.env` (сравни с changelog)
-- недоступна база данных (`remnawave-db` не успел стартовать)
 
 ---
 
-## 🔄 Обновление нод (remnanode)
+### ❌ Нода не обновляется скриптом (update_nodes.sh)
 
-Remnanode на нодах обновляются **автоматически через панель** — Remnawave сам пушит новую конфигурацию Xray при изменении. Вручную обновлять бинарь remnanode нужно только при мажорных апдейтах.
+```bash id="dg6n3k"
+# Проверить SSH-доступность
+ssh -v node-XX "echo ok"
 
-### Ручное обновление remnanode на ноде
+# Проверить путь до remnanode
+ssh node-XX "ls /opt/remnanode /root/remnanode 2>/dev/null"
 
-```bash id="nd1u3e"
-ssh node-XX
-
-# посмотреть текущую версию
-docker exec remnanode ./rw-node --version
-
-# обновить образ
-cd /opt/remnanode   # или где лежит docker-compose
-docker compose pull
-docker compose up -d
-
-# проверка
-docker logs remnanode --tail=10
-```
-
-### Массовое обновление всех нод скриптом
-
-```bash id="nd2m4f"
-bash /opt/update_nodes.sh
+# Запустить обновление вручную на ноде
+ssh node-XX "cd /opt/remnanode && docker compose pull && docker compose up -d"
 ```
 
 ---
 
 ## 🧠 Как это работает
 
-- Remnawave — NestJS-приложение, запущенное в Docker через PM2
-- При `docker compose up -d` контейнер получает **новый IP** в overlay-сети Docker (это нормально)
-- nginx использует DNS Docker-сети для резолва имени `remnawave`, но кеширует IP при старте
-- Поэтому: **сначала поднять remnawave → дождаться старта → перезапустить nginx**
+- Remnawave — NestJS-приложение, работающее в Docker через PM2
+- При `docker compose up -d` контейнер получает **новый IP** в overlay-сети Docker (это нормальное поведение Docker)
+- Nginx использует DNS Docker для резолва имени `remnawave`, но кеширует результат при старте
+- Правильная последовательность: **поднять remnawave → дождаться PM2 → перезапустить nginx**
+- Remnanode (на нодах) — отдельный бинарь в Docker, хранит конфиг Xray. Получает обновления конфига от панели автоматически
 
 ---
 
 ## 🔥 Рекомендации
 
-- всегда делай дамп БД перед обновлением
-- читай CHANGELOG перед мажорным апдейтом — там новые ENV-переменные
-- используй скрипт `update_remnawave.sh` — он делает всё в правильном порядке
-- держи 2–3 последних дампа БД (автобэкап каждый час — `backup_remna_hour.sh`)
-- после обновления проверяй что все ноды подключены в UI панели
+- Всегда делай **дамп БД** перед мажорными обновлениями
+- Читай **CHANGELOG** перед мажорным апдейтом — там новые ENV-переменные
+- Используй скрипты — они делают всё в правильном порядке и логируют результат
+- Держи **2–3 последних дампа** (автобэкап каждый час через `backup_remna_hour.sh`)
+- После обновления **проверяй в UI панели** что все ноды подключены — зелёные
+- Ноды с только `node_exporter` (без remnanode) **исключи** из `update_nodes.sh` через `EXCLUDE=`
+
+---
+
+## 📋 Чеклист после обновления
+
+- [ ] `docker ps` — все 5 контейнеров `Up`
+- [ ] `curl` на API — HTTP `200`
+- [ ] В UI панели все ноды зелёные (1–2 мин на восстановление)
+- [ ] Подписки открываются у клиентов
+- [ ] Нет ошибок в `docker logs remnawave --tail=30`
 
 ---
 
