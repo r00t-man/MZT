@@ -146,19 +146,11 @@ sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/hea
 
 # 🔐 Server Security
 
-Отдельный раздел с универсальными материалами по защите серверов:
+Один сводный гайд по защите VPN-сервера — переписан и проверен на реальном парке серверов 2026-07 (раньше это было 13 разрозненных заметок 2025 года, часть устарела/дублировалась):
 
-👉 https://github.com/r00t-man/MZT/tree/main/Server_Security
+👉 [Безопасность VPN-сервера — полное руководство](./Server_Security/README.md)
 
-Включает:
-
-- базовый hardening сервера
-- безопасную настройку `sudo`
-- hardening через `sysctl.conf`
-- SSH-ключи
-- безопасную DNS-конфигурацию (DoT + DNSSEC)
-- сетевой кейс VPS с масками `/32` и `/24`
-- [изменение DNS на серверах Яндекса (DoT)](./Server_Security/14_%D0%98%D0%B7%D0%BC%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D0%B5%20DNS%20%D0%BD%D0%B0%20%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80%D0%B0%D1%85%20%D0%AF%D0%BD%D0%B4%D0%B5%D0%BA%D1%81%D0%B0%20(DoT).md)
+Включает: SSH + разбор реальной ловушки с cloud-init, fail2ban (sshd + ловушка от сканеров портов, с разбором реальной ошибки `port=ssh`), nftables, sysctl/BBR, sudo и CVE-2025-32463 (как проверять патч правильно), IPv6/ICMP, DNS-шифрование с сервера (DoT).
 
 ---
 
@@ -217,14 +209,7 @@ MZT
 │   └── Правила маршрутизации Remna.md
 │
 ├── Server_Security
-│   ├── README.md
-│   ├── 02_Настройка безопасности сервера.md
-│   ├── 03_Безопасная настройка sudo.md
-│   ├── 06_Настройка безопасности sysctl.conf.md
-│   ├── 07_Настройка SSH-ключей.md
-│   ├── 12_Безопасная DNS-конфигурация сервера (DoT + DNSSEC).md
-│   ├── 13_Сетевой кейс VPS маски 24 и 32.md
-│   └── 14_Изменение DNS на серверах Яндекса (DoT).md
+│   └── README.md   (единый гайд — SSH/fail2ban/nftables/sysctl/sudo/IPv6/DNS)
 │
 └── VPN_3x-ui
     ├── 00_Введение в технологию.md
