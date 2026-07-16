@@ -1,19 +1,17 @@
-# 🚨 Дисклеймер
+# 📊 Установка Grafana + Prometheus (центральный сервер)
 
 > [!WARNING]
-> ⚠️ Установка Grafana/Prometheus в вашем сценарии возможна только:
-> - 🌍 на **заграничный сервер**, или
-> - 🇷🇺 на **российский сервер только под VPN/туннелем** (чтобы сервер имел стабильный доступ к внешним репозиториям и релизам).
-> - Dashboard лучше использовать этот: https://grafana.com/grafana/dashboards/1860-node-exporter-full/ 
-
----
-
-# 📊 Установка Grafana + Prometheus (центральный сервер)
+> Установка Grafana/Prometheus в вашем сценарии возможна только на **заграничный сервер**, либо на
+> **российский сервер только под VPN/туннелем** (чтобы сервер имел стабильный доступ к внешним
+> репозиториям и релизам). Dashboard лучше использовать этот:
+> [grafana.com/grafana/dashboards/1860-node-exporter-full](https://grafana.com/grafana/dashboards/1860-node-exporter-full/).
 
 Этот гайд ставит:
 - ✅ Prometheus (сбор метрик)
 - ✅ Grafana (дашборды)
-- ❗ Node Exporter вынесен в **отдельный скрипт** для нод/агентов, которые нужно мониторить.
+- ❗ Node Exporter вынесен в **отдельный скрипт** для нод/агентов, которые нужно мониторить
+
+---
 
 ## 1) 🚀 Установка одной командой
 
@@ -142,4 +140,7 @@ sudo journalctl -u grafana-server -n 100 --no-pager
 sudo journalctl -u prometheus -n 100 --no-pager
 ```
 
-Удачной установки! 🚀📈
+---
+
+*Часть репозитория [r00t-man/MZT](https://github.com/r00t-man/MZT). Остальные статьи — в
+[wiki/README.md](./README.md).*

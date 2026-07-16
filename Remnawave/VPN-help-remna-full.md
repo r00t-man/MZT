@@ -1,5 +1,20 @@
-# Remna Help
-## Схема проекта:
+# 🏗️ Полный деплой стека Remnawave + Bedolaga (панель + бот + кабинет + nginx)
+
+[![OS Linux](https://img.shields.io/badge/OS-Linux-blue?logo=linux&logoColor=white)](https://www.linux.org/)
+[![Docker](https://img.shields.io/badge/Docker-ready-blue?logo=docker)](https://www.docker.com/)
+[![Remnawave](https://img.shields.io/badge/Remnawave-panel%20%2B%20nodes-green?logo=v2ray)](https://github.com/remnawave)
+[![License](https://img.shields.io/badge/License-MIT-purple)](../LICENSE)
+
+Развёртывание с нуля всего стека: панель Remnawave, subscription page, Telegram-бот Bedolaga с
+кабинетом, nginx как единая точка входа на 3 домена. Для обновления уже работающего стека — см.
+[Remnawave — обновление панели и нод](./Remnawave%20—%20обновление%20панели%20и%20нод.md) и статьи про
+Bedolaga в этом же разделе.
+
+> [!IMPORTANT]
+> Домены (`domen-1.ru`/`domen-2.ru`), IP и `@YOUR_BOT_USERNAME` — плейсхолдеры. Замените на свои
+> значения перед использованием.
+
+## Схема проекта
 
 ```text
                                       INTERNET
@@ -152,7 +167,7 @@ Cхема:
 отдельная статика cabinet в `/srv/cabinet`
 nginx раздаёт cabinet и проксирует `/api/` в Remnawave, а `/api/cabinet/` в bot backend.    
 
-# 0. Текущая рабочая схема, если кратко
+## 0. Текущая рабочая схема, если кратко
 
 * `panel.domen-1.ru` → Remnawave panel
 * `users.domen-2.ru` → subscription page
@@ -167,7 +182,7 @@ nginx раздаёт cabinet и проксирует `/api/` в Remnawave, а `/
 * bot подключён в обе сети
 * BotFather domain добавлен
 
-# 1. Что именно ты поднимаешь
+## 1. Что именно ты поднимаешь
 
 В итоге на сервере будут работать 3 веб-домена и 1 Telegram-бот:
 
@@ -183,7 +198,7 @@ nginx раздаёт cabinet и проксирует `/api/` в Remnawave, а `/
 * Telegram-бот
   `@YOUR_BOT_USERNAME`
 
-# 2. Итоговая архитектура
+## 2. Итоговая архитектура
 
 На сервере работают такие сервисы:
 
@@ -213,7 +228,7 @@ nginx раздаёт cabinet и проксирует `/api/` в Remnawave, а `/
 * готовая статика кладётся в `/srv/cabinet`
 * nginx её раздаёт
 
-# 3. Каталоги
+## 3. Каталоги
 
 Создай такую структуру:
 
@@ -237,7 +252,7 @@ mkdir -p /srv/cabinet
 * `/opt/bedolaga-cabinet` — исходники cabinet
 * `/srv/cabinet` — собранная статика cabinet
 
-# 4. Подготовка сервера
+## 4. Подготовка сервера
 
 На Ubuntu 24.04:
 
@@ -254,7 +269,7 @@ docker --version
 docker compose version
 ```
 
-# 5. DNS
+## 5. DNS
 
 До запуска сервисов должны быть готовы A-записи:
 
@@ -262,7 +277,7 @@ docker compose version
 * `users.domen-2.ru` → IP сервера
 * `lk.domen-2.ru` → IP сервера
 
-# 6. Сертификаты
+## 6. Сертификаты
 
 Все сертификаты хранятся в `/opt/certs`.
 
@@ -281,7 +296,7 @@ docker compose version
 
 Имена файлов важны, потому что они уже зашиты в nginx.
 
-# 7. Развёртывание Remnawave
+## 7. Развёртывание Remnawave
 
 Перейди в `/opt/remnawave` и создай `docker-compose.yml`.
 
@@ -416,7 +431,7 @@ docker ps
 docker logs --tail=100 remnawave
 ```
 
-# 8. Развёртывание subscription page
+## 8. Развёртывание subscription page
 
 Каталог:
 `/opt/remnawave/subscription`
@@ -464,7 +479,7 @@ docker compose up -d
 docker logs --tail=100 remnawave-subscription-page
 ```
 
-# 9. Развёртывание Bedolaga bot
+## 9. Развёртывание Bedolaga bot
 
 Склонируй репозиторий:
 
@@ -654,7 +669,7 @@ docker logs --tail=200 remnawave_bot
 * HTTP-сервисы активны
 * web api запущен на `0.0.0.0:8080`
 
-# 10. Сборка Bedolaga cabinet
+## 10. Сборка Bedolaga cabinet
 
 ```bash
 cd /opt
@@ -711,7 +726,7 @@ ls -lah /srv/cabinet
 * `assets/`
 * `miniapp/`
 
-# 11. Развёртывание nginx
+## 11. Развёртывание nginx
 
 Каталог:
 `/opt/remnawave/nginx`
@@ -888,7 +903,7 @@ docker exec remnawave-nginx nginx -t
 docker exec remnawave-nginx nginx -s reload
 ```
 
-# 12. Порядок запуска всего проекта
+## 12. Порядок запуска всего проекта
 
 Вот правильная последовательность:
 
@@ -949,7 +964,7 @@ docker exec remnawave-nginx nginx -t
 docker exec remnawave-nginx nginx -s reload
 ```
 
-# 13. Проверки после запуска
+## 13. Проверки после запуска
 
 ## Панель
 
@@ -1002,7 +1017,7 @@ docker network inspect remnawave-network
 docker network inspect remnawave-bedolaga-telegram-bot_bot_network
 ```
 
-# 14. BotFather
+## 14. BotFather
 
 Очень важный шаг.
 
@@ -1013,7 +1028,7 @@ docker network inspect remnawave-bedolaga-telegram-bot_bot_network
 
 Без этого Telegram Login Widget может не завершать авторизацию.
 
-# 15. Что менять при переносе на новый сервер
+## 15. Что менять при переносе на новый сервер
 
 На новом проекте тебе надо заменить:
 
@@ -1057,7 +1072,7 @@ docker network inspect remnawave-bedolaga-telegram-bot_bot_network
 
 * новый домен кабинета
 
-# 16. Типовые проблемы
+## 16. Типовые проблемы
 
 ## Cabinet открывается, но логин по Telegram не работает
 
@@ -1104,3 +1119,8 @@ docker exec remnawave-nginx nginx -t
 ```bash
 chmod -R 777 data logs uploads locales
 ```
+
+---
+
+*Часть репозитория [r00t-man/MZT](https://github.com/r00t-man/MZT). Остальные статьи — в
+[Remnawave/README.md](./README.md).*

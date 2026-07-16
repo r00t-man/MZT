@@ -15,12 +15,9 @@
 ## 🧭 Быстрая Навигация
 
 [![Scripts](https://img.shields.io/badge/Scripts-install-blue?style=for-the-badge&logo=gnubash)](#-one-click-install)
-[![Guides](https://img.shields.io/badge/Guides-linux%20server-green?style=for-the-badge&logo=linux)](#-основные-гайды)
 [![Server Security](https://img.shields.io/badge/Server%20Security-hardening-red?style=for-the-badge&logo=letsencrypt)](#-server-security)
-[![VPN Docs](https://img.shields.io/badge/VPN-documentation-orange?style=for-the-badge&logo=wireguard)](#-vpn-инструкции)
 [![Remnawave](https://img.shields.io/badge/Remnawave-panel%20%2B%20nodes-teal?style=for-the-badge&logo=v2ray)](https://github.com/r00t-man/MZT/tree/main/Remnawave)
-[![Wiki](https://img.shields.io/badge/Wiki-server%20knowledge-purple?style=for-the-badge&logo=github)](https://github.com/r00t-man/MZT/tree/main/my-wiki)
-[![Info](https://img.shields.io/badge/Info-routing%20notes-yellow?style=for-the-badge&logo=readthedocs)](https://github.com/r00t-man/MZT/tree/main/info)
+[![Wiki](https://img.shields.io/badge/Wiki-server%20knowledge-purple?style=for-the-badge&logo=github)](https://github.com/r00t-man/MZT/tree/main/wiki)
 
 **MZT** — это коллекция:
 
@@ -53,93 +50,28 @@
 
 ---
 
-# 📚 Основные гайды
+# 📚 Wiki — общие статьи
 
-📖 Основные инструкции и статьи находятся здесь:
+Разрозненные гайды и памятки, не привязанные к конкретному разделу репозитория (статьи по Remnawave —
+балансировка/маршрутизация/VLESS→JSON/полный деплой стека/WARP — переехали в раздел
+[🌊 Remnawave](#-remnawave--панель-ноды-и-профили)):
 
-👉 https://github.com/r00t-man/MZT/tree/main/my-wiki
+👉 [Wiki — все статьи](./wiki/README.md)
 
 Там находятся гайды по:
 
-- 🐳 Docker  
-- 🔐 безопасности серверов  
-- 📡 прокси и сетевым сервисам  
-- ☁️ Cloudflare WARP для remnanode
-- 🧹 обслуживанию VPS  
-- 📊 мониторингу серверов через Grafana + Prometheus
-- 🖥️ кастомному SSH MOTD с быстрым обзором состояния сервера
-
----
-
-
-### 🆕 Новая статья: Dockermon
-
-- 📘 Гайд: [Dockermon — интерактивное управление Docker из терминала](./my-wiki/Dockermon%20—%20интерактивное%20управление%20Docker%20из%20терминала.md)
-- 🚀 Установка в одну команду:
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/dockermon.sh)
-```
-
-- ▶️ Запуск после установки:
-
-```bash
-dockermon
-```
-
----
-
-### 🆕 Новая статья: Grafana + Prometheus
-
-- 📘 Гайд: [Grafana Prometheus Setup](./my-wiki/Grafana%20Prometheus%20Setup.md)
-- 🚀 Быстрый старт (центральный сервер):
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)
-```
-
-- 🛰️ Быстрый старт (агенты/ноды):
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
-```
-
----
-
-### 🆕 Новая статья: Start SSH MOTD
-
-- 📘 Гайд: [Start SSH MOTD](./my-wiki/Start_SSH_motd.md)
-- 🚀 Установка в одну команду:
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server-stat-modt.sh)
-```
-
-- 🖼️ После установки при входе по SSH показывается сводка по uptime, нагрузке, памяти, диску, сети и Docker.
-
----
-
-# ℹ️ Раздел Info
-
-В корне репозитория добавлен раздел **info** с отдельными тематическими статьями, не привязанными к
-конкретному разделу репозитория (статьи по Remnawave — балансировка/маршрутизация/VLESS→JSON — переехали
-в раздел [🌊 Remnawave](#-remnawave--панель-ноды-и-профили)):
-
-- 📘 Базовые команды Ubuntu 24 для подготовки VPN-ноды
-- 🔄 Автоматическая передача файлов между серверами через rsync и SSH
-- 📊 Мониторинг Beszel — быстрый старт
-- 🤖 Docker-контейнер с Telegram-ботом через Xray proxy
-- 🖥️ Работа со `screen` — мультиплексор терминала
-
-📘 Прямой файл: [MZT/info/Работа со `screen` — мультиплексор терминала.md](./info/Работа%20со%20screen%20—%20мультиплексор%20терминала.md)
+- 🐳 Docker (Dockermon, Telegram-бот через Xray proxy)
+- 🔐 аудиту команд и безопасности серверов
+- 📡 MTProxy/SOCKS5-прокси для Telegram
+- 🧹 обслуживанию и очистке VPS
+- 📊 мониторингу (Grafana + Prometheus, Beszel)
+- 🖥️ SSH MOTD, `screen`, подготовке чистого сервера, переносу файлов через rsync
 
 🚀 Быстрая установка `scrmenu` (CLI-меню для `screen`):
 
 ```bash
 sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/heads/main/files/scrmenu.sh -o /usr/local/bin/scrmenu && chmod +x /usr/local/bin/scrmenu'
 ```
-
-👉 https://github.com/r00t-man/MZT/tree/main/info
 
 ---
 
@@ -157,26 +89,12 @@ sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/hea
 
 ---
 
-# 📡 VPN инструкции 3X-UI
-
-Полная серия инструкций по развёртыванию и настройке VPN находится в папке **VPN_3x-ui**:
-
-👉 https://github.com/r00t-man/MZT/tree/main/VPN_3x-ui
-
-Включает:
-
-- установка собственного VPN  
-- каскадные конфигурации  
-- настройка DNS (DoH / DoT)  
-- оптимизация сети  
-
----
-
 # 🌊 Remnawave — панель, ноды и профили
 
-Отдельный раздел про эксплуатацию **Remnawave**: безопасное обновление панели/бота/кабинета (и разбор
-самой частой поломки — «Технические работы» из-за разъехавшихся Docker-сетей), готовые JSON-профили
-инбаундов (блокировка `.ru`-трафика, маскировка под сайт через nginx+XHTTP+WARP), фильтрация трафика
+Отдельный раздел про эксплуатацию **Remnawave**: развёртывание всего стека с нуля (панель + бот +
+кабинет + nginx), безопасное обновление панели/бота/кабинета (и разбор самой частой поломки —
+«Технические работы» из-за разъехавшихся Docker-сетей), готовые JSON-профили инбаундов (блокировка
+`.ru`-трафика, маскировка под сайт через nginx+XHTTP, выход через Cloudflare WARP), фильтрация трафика
 на ноде (TaffGuard/mobile443 — обход мобильных глушилок), и балансировка/маршрутизация трафика между
 нодами (стратегии `leastLoad`/`leastPing`/`roundRobin`, правила `routing.rules`, шпаргалка VLESS → JSON):
 
@@ -203,17 +121,16 @@ MZT
 ├── help
 │   └── Programms.md
 │
-├── my-wiki
+├── wiki
+│   ├── README.md   (меню — все общие статьи)
 │   ├── Audit-history.md
 │   ├── Dockermon — интерактивное управление Docker из терминала.md
 │   ├── MTProxy_TG.md
-│   ├── WARP-remna.md
+│   ├── Proxy SOCKS5 manager.md
 │   ├── Ultra Clean VPS.md
 │   ├── Grafana Prometheus Setup.md
-│   └── Start_SSH_motd.md
-│
-├── info
-│   ├── README.md
+│   ├── Start_SSH_motd.md
+│   ├── Telegram — широкие inline-кнопки U+2800.md
 │   ├── Автоматическая передача файлов между серверами через rsync и SSH.md
 │   ├── Базовые команды Ubuntu 24 для подготовки VPN-ноды.md
 │   ├── Мониторинг Beszel — быстрый старт.md
@@ -236,18 +153,11 @@ MZT
 │   ├── Балансировка remna.md
 │   ├── Правила маршрутизации Remna.md
 │   ├── Примечание к балансировке remna — резерв для Яндекс-ноды.md
-│   └── Шпаргалка VLESS в балансировочный JSON для remna.md
+│   ├── Шпаргалка VLESS в балансировочный JSON для remna.md
+│   ├── VPN-help-remna-full.md
+│   └── WARP-remna.md
 │
-└── VPN_3x-ui
-    ├── 00_Введение в технологию.md
-    ├── 01_Установка своего VPN.md
-    ├── 04_Настройка каскадного VPN.md
-    ├── 05_Настройка правил для доменов.md
-    ├── 08_Установка собственного DNS.md
-    ├── 09_Настройка DNS (DoT) на VPN.md
-    ├── 10_Настройка DNS (DoH) на VPN.md
-    ├── 11_DNS (DoT) - Возможна ошибка.md
-    └── 14_Размывка трафика VPN.md
+└── LICENSE
 
 ```
 

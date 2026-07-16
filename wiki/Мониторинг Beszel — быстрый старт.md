@@ -123,3 +123,8 @@ docker ps | grep beszel
 
 Если нужен полный и актуальный разбор, всегда сверяйся с официальным руководством Beszel:  
 👉 https://www.beszel.dev/guide/getting-started
+
+---
+
+*Часть репозитория [r00t-man/MZT](https://github.com/r00t-man/MZT). Остальные статьи — в
+[wiki/README.md](./README.md).*

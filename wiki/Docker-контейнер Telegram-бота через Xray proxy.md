@@ -577,3 +577,8 @@ docker logs -f --tail 200 remnawave_bot
 10. пересобрать контейнер.
 
 После этого бот обычно начинает нормально работать с Telegram API даже там, где прямой доступ к Telegram ограничивается.
+
+---
+
+*Часть репозитория [r00t-man/MZT](https://github.com/r00t-man/MZT). Остальные статьи — в
+[wiki/README.md](./README.md).*
