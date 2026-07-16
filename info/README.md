@@ -1,63 +1,42 @@
-# ℹ️ Раздел Info
+# ℹ️ Info — разрозненные заметки по администрированию
 
-В этой папке собраны отдельные тематические статьи и справка по настройкам, не привязанные к
-конкретному разделу репозитория.
+[![OS Linux](https://img.shields.io/badge/OS-Linux-blue?logo=linux&logoColor=white)](https://www.linux.org/)
+[![License](https://img.shields.io/badge/License-MIT-purple)](../LICENSE)
+
+Короткие тематические статьи и памятки, которые не привязаны к конкретному разделу репозитория:
+подготовка сервера с нуля, перенос файлов, мониторинг, Docker, `screen`.
 
 > [!NOTE]
 > Статьи про Remnawave (балансировка, маршрутизация, VLESS→JSON) переехали в
-> [Remnawave](../Remnawave/README.md) — там свой раздел про эксплуатацию панели и нод.
+> [🌊 Remnawave](../Remnawave/README.md) — там свой раздел про эксплуатацию панели и нод.
 
-## 📚 Материалы
+---
 
-- 📘 [Базовые команды Ubuntu 24 для подготовки VPN-ноды](./Базовые%20команды%20Ubuntu%2024%20для%20подготовки%20VPN-ноды.md)
-- 📊 [Мониторинг Beszel — быстрый старт](./Мониторинг%20Beszel%20—%20быстрый%20старт.md)
-- 🔄 [Автоматическая передача файлов между серверами через rsync и SSH](./Автоматическая%20передача%20файлов%20между%20серверами%20через%20rsync%20и%20SSH.md)
-- 🤖 [Docker-контейнер с Telegram-ботом через Xray proxy](./Docker-контейнер%20Telegram-бота%20через%20Xray%20proxy.md)
-- 🐳 [Dockermon — интерактивное управление Docker из терминала](../my-wiki/Dockermon%20—%20интерактивное%20управление%20Docker%20из%20терминала.md)
-- 🖥️ [Работа со `screen` — мультиплексор терминала](./Работа%20со%20screen%20—%20мультиплексор%20терминала.md)
+## 🧭 Меню — куда сразу перейти
 
-**Быстрая установка `scrmenu` (CLI-меню для `screen`):**
+| Если тебе нужно… | Статья | Коротко |
+|---|---|---|
+| 🐧 Подготовить чистый Ubuntu 24.04 под VPN-ноду с нуля | [Базовые команды Ubuntu 24 для подготовки VPN-ноды](./Базовые%20команды%20Ubuntu%2024%20для%20подготовки%20VPN-ноды.md) | Универсальный чеклист: sudo-пользователь, SSH-ключи, nftables, fail2ban, sysctl-hardening |
+| 📊 Поднять лёгкий мониторинг серверов | [Мониторинг Beszel — быстрый старт](./Мониторинг%20Beszel%20—%20быстрый%20старт.md) | Конспект официального гайда на русском: Hub + Agent через Docker Compose |
+| 🔄 Настроить беспарольную синхронизацию между двумя серверами | [Автоматическая передача файлов через rsync и SSH](./Автоматическая%20передача%20файлов%20между%20серверами%20через%20rsync%20и%20SSH.md) | SSH-ключи без пароля + `rsync` + автозапуск по `cron` |
+| 🤖 Починить Telegram-бота в Docker, у которого нет доступа к `api.telegram.org` | [Docker-контейнер Telegram-бота через Xray proxy](./Docker-контейнер%20Telegram-бота%20через%20Xray%20proxy.md) | Локальный Xray HTTP-proxy на gateway Docker-сети, `trust_env`/`aiohttp-socks` для `aiogram` |
+| 🖥️ Не терять процессы при обрыве SSH-сессии | [Работа со `screen` — мультиплексор терминала](./Работа%20со%20screen%20—%20мультиплексор%20терминала.md) | Базовые команды `screen` + готовое CLI-меню `scrmenu` |
+| 🐳 Управлять Docker-контейнерами из интерактивного меню | [Dockermon](../my-wiki/Dockermon%20—%20интерактивное%20управление%20Docker%20из%20терминала.md) | Установка одной командой, меню вместо запоминания `docker` команд |
+| 📈 Развернуть центральный Prometheus + Grafana | [Grafana Prometheus Setup](../my-wiki/Grafana%20Prometheus%20Setup.md) | Центральный сервер + агент `node_exporter` на нодах |
+| 🔑 Показать сводку по серверу прямо при входе по SSH | [Start SSH MOTD](../my-wiki/Start_SSH_motd.md) | uptime, нагрузка, диск, сеть, systemd и Docker одним экраном |
+| 🔐 Зашифровать DNS-запросы с самого сервера (DoT) | [Server Security, раздел 7 — DNS](../Server_Security/README.md#7-dns-сервера--шифрование-и-фильтрация) | DoT напрямую на публичные резолверы, без отдельного локального DNS-сервиса |
+
+---
+
+## 🚀 Быстрая установка `scrmenu` (CLI-меню для `screen`)
 
 ```bash
 sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/heads/main/files/scrmenu.sh -o /usr/local/bin/scrmenu && chmod +x /usr/local/bin/scrmenu'
 ```
 
----
-
-## 🔐 Новая статья в Server Security
-
-- 📘 [Изменение DNS на серверах Яндекса (DoT)](../Server_Security/14_%D0%98%D0%B7%D0%BC%D0%B5%D0%BD%D0%B5%D0%BD%D0%B8%D0%B5%20DNS%20%D0%BD%D0%B0%20%D1%81%D0%B5%D1%80%D0%B2%D0%B5%D1%80%D0%B0%D1%85%20%D0%AF%D0%BD%D0%B4%D0%B5%D0%BA%D1%81%D0%B0%20(DoT).md)
+Запуск: `scrmenu`.
 
 ---
 
-## 🆕 Новая статья по мониторингу
-
-- 📘 [Grafana Prometheus Setup](../my-wiki/Grafana%20Prometheus%20Setup.md)
-
-**Быстрый старт (центральный сервер):**
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_grafana_prometheus.sh)
-```
-
-**Быстрый старт (агенты/ноды):**
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/install_node_exporter_agent.sh)
-```
-
----
-
-## 🖥️ Полезный SSH-инструмент
-
-- 📘 [Start SSH MOTD](../my-wiki/Start_SSH_motd.md)
-
-**Установка в одну команду:**
-
-```bash
-bash <(curl -Ls https://raw.githubusercontent.com/r00t-man/MZT/main/files/server-stat-modt.sh)
-```
-
-Показывает красивый MOTD при входе по SSH: uptime, загрузку, диск, сеть, systemd и Docker.
-
----
+*Часть репозитория [r00t-man/MZT](https://github.com/r00t-man/MZT). Остальные разделы — в
+[корневом README](../README.md).*
