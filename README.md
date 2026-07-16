@@ -18,6 +18,7 @@
 [![Guides](https://img.shields.io/badge/Guides-linux%20server-green?style=for-the-badge&logo=linux)](#-основные-гайды)
 [![Server Security](https://img.shields.io/badge/Server%20Security-hardening-red?style=for-the-badge&logo=letsencrypt)](#-server-security)
 [![VPN Docs](https://img.shields.io/badge/VPN-documentation-orange?style=for-the-badge&logo=wireguard)](#-vpn-инструкции)
+[![Remnawave](https://img.shields.io/badge/Remnawave-panel%20%2B%20nodes-teal?style=for-the-badge&logo=v2ray)](https://github.com/r00t-man/MZT/tree/main/Remnawave)
 [![Wiki](https://img.shields.io/badge/Wiki-server%20knowledge-purple?style=for-the-badge&logo=github)](https://github.com/r00t-man/MZT/tree/main/my-wiki)
 [![Info](https://img.shields.io/badge/Info-routing%20notes-yellow?style=for-the-badge&logo=readthedocs)](https://github.com/r00t-man/MZT/tree/main/info)
 
@@ -169,6 +170,17 @@ sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/hea
 
 ---
 
+# 🌊 Remnawave — панель, ноды и профили
+
+Отдельный раздел про эксплуатацию **Remnawave**: безопасное обновление панели/бота/кабинета (и разбор
+самой частой поломки — «Технические работы» из-за разъехавшихся Docker-сетей), готовые JSON-профили
+инбаундов (блокировка `.ru`-трафика, маскировка под сайт через nginx+XHTTP+WARP), и фильтрация трафика
+на ноде (TaffGuard/mobile443 — обход мобильных глушилок):
+
+👉 [Remnawave — гайды по эксплуатации панели, нод и профилей](./Remnawave/README.md)
+
+---
+
 # 📂 Структура репозитория
 
 ```
@@ -210,6 +222,16 @@ MZT
 │
 ├── Server_Security
 │   └── README.md   (единый гайд — SSH/fail2ban/nftables/sysctl/sudo/IPv6/DNS)
+│
+├── Remnawave
+│   ├── README.md   (меню — что внутри и куда сразу перейти)
+│   ├── Remnawave — обновление панели и нод.md
+│   ├── Bedolaga Telegram Bot - update.md
+│   ├── Bedolaga Cabinet - update.md
+│   ├── Bedolaga Cabinet - после обновления показывает тех.работы.md
+│   ├── block-ru-v2-json.md
+│   ├── nginx+xhttp+tls+warp.md
+│   └── Install TaffGuard nftables.md
 │
 └── VPN_3x-ui
     ├── 00_Введение в технологию.md
