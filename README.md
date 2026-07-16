@@ -151,6 +151,10 @@ sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/hea
 
 Включает: SSH + разбор реальной ловушки с cloud-init, fail2ban (sshd + ловушка от сканеров портов, с разбором реальной ошибки `port=ssh`), nftables, sysctl/BBR, sudo и CVE-2025-32463 (как проверять патч правильно), IPv6/ICMP, DNS-шифрование с сервера (DoT).
 
+Только что купили сервер? Копипаст-версия без firewall (он отдельно) + пакеты для администрирования/диагностики:
+
+👉 [Новый сервер — чек-лист первичной настройки](./Server_Security/Новый%20сервер%20—%20чек-лист%20первичной%20настройки.md)
+
 ---
 
 # 📡 VPN инструкции 3X-UI
@@ -217,7 +221,8 @@ MZT
 │   └── Работа со screen — мультиплексор терминала.md
 │
 ├── Server_Security
-│   └── README.md   (единый гайд — SSH/fail2ban/nftables/sysctl/sudo/IPv6/DNS)
+│   ├── README.md   (единый гайд — SSH/fail2ban/nftables/sysctl/sudo/IPv6/DNS)
+│   └── Новый сервер — чек-лист первичной настройки.md   (копипаст, без firewall)
 │
 ├── Remnawave
 │   ├── README.md   (меню — что внутри и куда сразу перейти)
