@@ -93,7 +93,9 @@ docker compose down
 
 ## 🧠 5. Миграции базы данных
 
-> ⚠️ Критически важный шаг
+> [!IMPORTANT]
+> Критически важный шаг. `docker compose run` сам поднимет зависимости (`remnawave_bot_db`), даже если
+> перед этим был `docker compose down` — не нужно поднимать БД отдельно.
 
 ```bash id="z6m8eu"
 docker compose run --rm bot alembic upgrade head
@@ -106,6 +108,11 @@ docker compose run --rm bot alembic upgrade head
 ```bash id="o3v7kn"
 docker compose up -d
 ```
+
+> [!WARNING]
+> После `down` → `up -d` Docker может поднять бота в новой/другой сети, не связанной с `remnawave-nginx`.
+> Кабинет при этом покажет «Технические работы», хотя бот и все контейнеры будут в порядке (`Up`/`healthy`).
+> Симптомы и фикс — [Bedolaga Cabinet — после обновления показывает тех.работы](./Bedolaga%20Cabinet%20-%20после%20обновления%20показывает%20тех.работы.md).
 
 ---
 

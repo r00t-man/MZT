@@ -2,6 +2,10 @@
 
 **Версии, при которых замечено:** Remnawave Bedolaga Bot ≥ 2.8.0
 
+> [!NOTE]
+> Возникает именно после шагов из [Remnawave Bedolaga Telegram Bot — update](./Bedolaga%20Telegram%20Bot%20-%20update.md)
+> (`docker compose down` → `up -d`) — Docker может поднять контейнер бота в новой/другой сети.
+
 ---
 
 ## 🔍 Симптомы
