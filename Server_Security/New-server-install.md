@@ -110,27 +110,29 @@ sudo -v
 
 ## 4) SSH-ключи и жёсткий SSH
 
-На сервере (под нужным пользователем):
+На сервере (под нужным пользователем) — замените строку с ключом на свой публичный ключ:
 
 ```bash
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
-nano ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys
+cat >> ~/.ssh/authorized_keys <<'EOF'
+ssh-ed25519 AAAA... ваш_публичный_ключ
+EOF
+chmod 600 ~/.ssh/authorized_keys
 ```
 
-Базовый блок в `/etc/ssh/sshd_config`:
-
-```ini
-Port SSH_PORT
-PubkeyAuthentication yes
-PasswordAuthentication no
-PermitRootLogin prohibit-password
-X11Forwarding no
-MaxAuthTries 3
-ClientAliveInterval 300
-ClientAliveCountMax 2
-```
+Базовый блок в `/etc/ssh/sshd_config` — правим существующие строки на месте (не дублируем в конец файла,
+иначе при повторной директиве в sshd_config побеждает **первая**, а не последняя — см. предупреждение
+ниже про cloud-init, тот же принцип):
 
 ```bash
+sed -i 's/^#\?Port .*/Port SSH_PORT/' /etc/ssh/sshd_config
+sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
+sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
+sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
+sed -i 's/^#\?X11Forwarding.*/X11Forwarding no/' /etc/ssh/sshd_config
+sed -i 's/^#\?MaxAuthTries.*/MaxAuthTries 3/' /etc/ssh/sshd_config
+sed -i 's/^#\?ClientAliveInterval.*/ClientAliveInterval 300/' /etc/ssh/sshd_config
+sed -i 's/^#\?ClientAliveCountMax.*/ClientAliveCountMax 2/' /etc/ssh/sshd_config
 sshd -t && systemctl restart ssh
 ```
 
@@ -150,9 +152,9 @@ sshd -t && systemctl restart ssh
 
 ## 5) Fail2ban для SSH
 
-`/etc/fail2ban/jail.local`:
-
-```ini
+```bash
+mkdir -p /etc/fail2ban
+cat > /etc/fail2ban/jail.local <<'EOF'
 [sshd]
 enabled  = true
 port     = SSH_PORT
@@ -161,9 +163,7 @@ backend  = systemd
 findtime = 600
 maxretry = 3
 bantime  = 1h
-```
-
-```bash
+EOF
 systemctl enable --now fail2ban
 fail2ban-client status sshd
 ```
@@ -191,17 +191,14 @@ apt-cache policy sudo
 
 ## 7) Базовая сетевая гигиена (`sysctl`)
 
-`/etc/sysctl.d/98-hygiene.conf`:
-
-```ini
+```bash
+cat > /etc/sysctl.d/98-hygiene.conf <<'EOF'
 net.ipv4.tcp_syncookies = 1
 net.ipv4.conf.all.rp_filter = 1
 net.ipv4.conf.default.rp_filter = 1
 net.ipv4.icmp_echo_ignore_broadcasts = 1
 net.ipv4.icmp_ignore_bogus_error_responses = 1
-```
-
-```bash
+EOF
 sysctl --system
 ```
 

@@ -153,7 +153,7 @@ sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/hea
 
 Только что купили сервер? Копипаст-версия без firewall (он отдельно) + пакеты для администрирования/диагностики:
 
-👉 [Новый сервер — чек-лист первичной настройки](./Server_Security/Новый%20сервер%20—%20чек-лист%20первичной%20настройки.md)
+👉 [Новый сервер — чек-лист первичной настройки](./Server_Security/New-server-install.md)
 
 ---
 
@@ -222,7 +222,7 @@ MZT
 │
 ├── Server_Security
 │   ├── README.md   (единый гайд — SSH/fail2ban/nftables/sysctl/sudo/IPv6/DNS)
-│   └── Новый сервер — чек-лист первичной настройки.md   (копипаст, без firewall)
+│   └── New-server-install.md   (копипаст-чеклист нового сервера, без firewall)
 │
 ├── Remnawave
 │   ├── README.md   (меню — что внутри и куда сразу перейти)
