@@ -27,15 +27,17 @@ apt install -y jq
 
 # 2. Четыре файла прямо с GitHub — без git clone
 mkdir -p /opt/.claude/hooks
-curl -fsSL -o /opt/.claude/settings.json \
-  https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/settings.json
-curl -fsSL -o /opt/.claude/hooks/guard.sh \
-  https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/guard.sh
-curl -fsSL -o /opt/CLAUDE.md \
-  https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/CLAUDE.md.example
-curl -fsSL -o /opt/setup-wizard.sh \
-  https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/setup-wizard.sh
+curl -fsSL -o /opt/.claude/settings.json https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/settings.json
+curl -fsSL -o /opt/.claude/hooks/guard.sh https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/guard.sh
+curl -fsSL -o /opt/CLAUDE.md https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/CLAUDE.md.example
+curl -fsSL -o /opt/setup-wizard.sh https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/setup-wizard.sh
 chmod +x /opt/.claude/hooks/guard.sh /opt/setup-wizard.sh   # оба ОБЯЗАНЫ быть исполняемыми
+
+# 2b. Проверка — все 4 файла на месте, не пустые, права выставлены как надо
+for f in /opt/.claude/settings.json /opt/.claude/hooks/guard.sh /opt/CLAUDE.md /opt/setup-wizard.sh; do
+  [ -s "$f" ] && echo "✅ $f ($(wc -c < "$f") байт)" || echo "❌ $f — не скачался или пустой, повтори curl для этого файла"
+done
+ls -l /opt/.claude/hooks/guard.sh /opt/setup-wizard.sh | awk '{print ($1 ~ /x/) ? "✅ исполняемый: " $NF : "❌ НЕ исполняемый: " $NF}'
 
 # 3. Мастер: сканирует контейнеры → дописывает черновик в CLAUDE.md,
 #    и опционально заводит SSH-ключи к нодам + вход на этот сервер по ключу +
