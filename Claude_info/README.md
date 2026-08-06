@@ -11,7 +11,7 @@
 
 ## ⚡ Быстрая установка (TL;DR)
 
-Именно так это развёрнуто у нас в проде: без клонирования репозитория целиком — просто затягиваем три
+Именно так это развёрнуто у нас в проде: без клонирования репозитория целиком — просто затягиваем четыре
 файла напрямую на сервер. Полное объяснение каждого шага и модель безопасности — ниже, начни с
 [🏗️ Модель безопасности](#️-модель-безопасности-3-слоя), если это первый заход.
 
@@ -20,38 +20,60 @@
 > не git-репозиторий, как у нас), эта защита не нужна вовсе: `CLAUDE.md` с реальными доменами/путями
 > — обычный локальный файл, коммитить его некуда и незачем.
 
+Шаги ниже — отдельные блоки, каждый копируется и выполняется по одному (не одним куском).
+
+**Шаг 1. Claude Code (нативный бинарь, без Node.js) + jq (нужен хуку)**
+
 ```bash
-# 1. Claude Code (нативный бинарь, без Node.js) + jq (нужен хуку)
 curl -fsSL https://claude.ai/install.sh | bash
 apt install -y jq
+```
 
-# 2. Четыре файла прямо с GitHub — без git clone
+**Шаг 2. Четыре файла прямо с GitHub — без git clone**
+
+```bash
 mkdir -p /opt/.claude/hooks
 curl -fsSL -o /opt/.claude/settings.json https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/settings.json
 curl -fsSL -o /opt/.claude/hooks/guard.sh https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/guard.sh
 curl -fsSL -o /opt/CLAUDE.md https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/CLAUDE.md.example
 curl -fsSL -o /opt/setup-wizard.sh https://raw.githubusercontent.com/r00t-man/MZT/main/Claude_info/setup-wizard.sh
-chmod +x /opt/.claude/hooks/guard.sh /opt/setup-wizard.sh   # оба ОБЯЗАНЫ быть исполняемыми
+chmod +x /opt/.claude/hooks/guard.sh /opt/setup-wizard.sh
+```
 
-# 2b. Проверка — все 4 файла на месте, не пустые, права выставлены как надо
+`guard.sh` и `setup-wizard.sh` ОБЯЗАНЫ быть исполняемыми — `chmod +x` в конце шага 2 это уже делает.
+
+**Шаг 2b. Проверка — все 4 файла на месте, не пустые, права выставлены как надо**
+
+```bash
 for f in /opt/.claude/settings.json /opt/.claude/hooks/guard.sh /opt/CLAUDE.md /opt/setup-wizard.sh; do
   [ -s "$f" ] && echo "✅ $f ($(wc -c < "$f") байт)" || echo "❌ $f — не скачался или пустой, повтори curl для этого файла"
 done
 ls -l /opt/.claude/hooks/guard.sh /opt/setup-wizard.sh | awk '{print ($1 ~ /x/) ? "✅ исполняемый: " $NF : "❌ НЕ исполняемый: " $NF}'
+```
 
-# 3. Мастер: сканирует контейнеры → дописывает черновик в CLAUDE.md,
-#    и опционально заводит SSH-ключи к нодам + вход на этот сервер по ключу +
-#    адрес Remnawave-панели/API-ключ + Cloudflare Global API Key (домены/A-записи)
-#    — секреты защищены guard.sh как *.key
-#    (каждый шаг можно пропустить кнопкой n/Enter — тогда напечатает команды руками)
+**Шаг 3. Мастер настройки**
+
+Сканирует Docker-контейнеры → дописывает черновик в `CLAUDE.md`, и опционально заводит SSH-ключи к нодам + вход на этот сервер по ключу + адрес Remnawave-панели/API-ключ + Cloudflare Global API Key (домены/A-записи) — секреты защищены `guard.sh` как `*.key`. Каждый шаг мастера можно пропустить кнопкой `n`/Enter — тогда он напечатает команды руками.
+
+```bash
 bash /opt/setup-wizard.sh
-nano /opt/CLAUDE.md   # дозаполни руками: что нельзя трогать, рабочие процессы
+```
 
-# 4. Обязательно проверь хук ДО первого запуска — должно быть rc=2:
-echo '{"tool_name":"Bash","tool_input":{"command":"docker compose down -v"}}' \
-  | /opt/.claude/hooks/guard.sh; echo "rc=$?"
+Затем дозаполни руками: что нельзя трогать, рабочие процессы.
 
-# 5. Запуск и авторизация (код-пейст — браузер на сервере не нужен)
+```bash
+nano /opt/CLAUDE.md
+```
+
+**Шаг 4. Обязательно проверь хук ДО первого запуска — должно быть `rc=2`**
+
+```bash
+echo '{"tool_name":"Bash","tool_input":{"command":"docker compose down -v"}}' | /opt/.claude/hooks/guard.sh; echo "rc=$?"
+```
+
+**Шаг 5. Запуск и авторизация** (код-пейст — браузер на сервере не нужен)
+
+```bash
 cd /opt && claude
 ```
 
