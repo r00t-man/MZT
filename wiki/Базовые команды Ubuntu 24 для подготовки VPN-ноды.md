@@ -260,6 +260,61 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 Размер подбирать под RAM — 512MB-1GB достаточно для лёгкой VPN-ноды (1-2 vCPU, 1-2GB RAM), не пытаться копировать пропорции десктопа.
 
+#### Своп не даёт себя изменить — три частые причины
+
+Сначала диагностика — что вообще сейчас даёт своп:
+
+```bash
+swapon --show    # колонка TYPE: file / partition / zram (!)
+cat /proc/swaps
+free -h
+```
+
+**1. `swapoff` виснет или падает `Cannot allocate memory`**
+
+Значит, своп реально используется, и в RAM физически некуда переместить обратно вытесненные страницы — своп нельзя выключить, если некуда деть его содержимое.
+
+```bash
+# временно добавляем ВТОРОЙ swap, чтобы дать ядру место для манёвра
+sudo fallocate -l 512M /swapfile2
+sudo chmod 600 /swapfile2
+sudo mkswap /swapfile2
+sudo swapon /swapfile2
+
+sudo swapoff /swapfile   # теперь должно пройти — есть куда переложить страницы
+# дальше делаем что нужно с /swapfile (пересоздать/удалить/изменить размер)
+sudo swapoff /swapfile2 && sudo rm /swapfile2   # убираем временный
+```
+
+**2. Нельзя просто "увеличить" уже активный swap-файл**
+
+`fallocate`/`truncate` на уже включённом свопе не работают как ожидается — файл нужно пересоздать целиком:
+
+```bash
+sudo swapoff /swapfile
+sudo rm /swapfile
+sudo fallocate -l 1G /swapfile      # новый размер
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+```
+
+`/etc/fstab` трогать не нужно, если путь `/swapfile` не менялся — строка остаётся валидной.
+
+**3. Своп есть, а файла нигде нет — Ubuntu 24.04 часто ставит `zram` по умолчанию**
+
+На многих облачных VPS-образах уже крутится **zram-своп** (сжатая область в самой RAM, отдельный механизм, не файл на диске) — `swapon --show` покажет `TYPE=partition`, `NAME=/dev/zram0`, а искать `/swapfile` бесполезно, его и не было.
+
+```bash
+swapon --show          # видишь /dev/zram0 — это оно
+systemctl status systemd-zram-setup@zram0.service 2>/dev/null
+sudo systemctl disable --now systemd-zram-setup@zram0.service
+# или, если стоит пакет zram-tools/zram-config:
+sudo apt remove --purge zram-tools
+```
+
+Можно и не выключать — zram и обычный swapfile спокойно живут вместе одновременно (у каждого своя строка в `swapon --show`, у обычного файла можно задать приоритет выше через `swapon -p 10 /swapfile`).
+
 ---
 
 ## 8) DNS и время (важно для TLS/сертификатов)
