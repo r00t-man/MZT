@@ -27,6 +27,7 @@
 | 🔎 Логировать все команды пользователей на сервере | [Audit History](./Audit-history.md) | auditd + bash-hook + IP SSH-подключений, ротация, опциональный удалённый syslog |
 | 🧹 Освободить место на диске (VPS с маленьким диском) | [Ultra Clean VPS](./Ultra%20Clean%20VPS.md) | APT/journald/nginx/Docker-логи, старые ядра, snap, firmware — 1–8 GB места |
 | 📊 Поднять центральный мониторинг Prometheus + Grafana | [Grafana Prometheus Setup](./Grafana%20Prometheus%20Setup.md) | Центральный сервер + `node_exporter` на нодах |
+| 📡 Мониторить живость серверов (ping/SSH/порт) и метрики Docker-контейнеров | [Grafana — дашборды Blackbox и cAdvisor](./Grafana%20—%20дашборды%20Blackbox%20и%20cAdvisor.md) | Blackbox Exporter (ICMP/SSH/TCP) + cAdvisor, готовые JSON дашбордов |
 | 📊 Поднять лёгкий мониторинг серверов (альтернатива) | [Мониторинг Beszel — быстрый старт](./Мониторинг%20Beszel%20—%20быстрый%20старт.md) | Hub + Agent через Docker Compose, конспект официального гайда |
 | 🖥️ Показать сводку по серверу прямо при входе по SSH | [Start SSH MOTD](./Start_SSH_motd.md) | uptime, нагрузка, диск, сеть, systemd и Docker одним экраном |
 | 🖥️ Не терять процессы при обрыве SSH-сессии | [Работа со `screen`](./Работа%20со%20screen%20—%20мультиплексор%20терминала.md) | Базовые команды `screen` + готовое CLI-меню `scrmenu` |
