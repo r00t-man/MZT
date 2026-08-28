@@ -1,7 +1,7 @@
 # 🆕 Новый сервер — чек-лист первичной настройки
 
 [![OS Linux](https://img.shields.io/badge/OS-Linux-blue?logo=linux&logoColor=white)](https://www.linux.org/)
-[![Tested on](https://img.shields.io/badge/tested%20on-Ubuntu%2024.04%20%7C%20Debian%2012-orange?style=flat-square)]()
+[![Tested on](https://img.shields.io/badge/tested%20on-Ubuntu%2024.04-orange?style=flat-square)]()
 [![License](https://img.shields.io/badge/License-MIT-purple)](../LICENSE)
 
 Копипаст-чеклист для только что купленного VPS: с чего начать **до** установки любого VPN-стека
@@ -120,28 +120,39 @@ EOF
 chmod 600 ~/.ssh/authorized_keys
 ```
 
-Базовый блок в `/etc/ssh/sshd_config` — правим существующие строки на месте (не дублируем в конец файла,
-иначе при повторной директиве в sshd_config побеждает **первая**, а не последняя — см. предупреждение
-ниже про cloud-init, тот же принцип):
+**Не редактируем сам `/etc/ssh/sshd_config`** — только свой drop-in, который сортируется РАНЬШЕ
+cloud-init по алфавиту (иначе `50-cloud-init.conf` с `PasswordAuthentication yes` победит — у sshd
+выигрывает **первая** встреченная директива, не последняя):
 
 ```bash
-sed -i 's/^#\?Port .*/Port SSH_PORT/' /etc/ssh/sshd_config
-sed -i 's/^#\?PubkeyAuthentication.*/PubkeyAuthentication yes/' /etc/ssh/sshd_config
-sed -i 's/^#\?PasswordAuthentication.*/PasswordAuthentication no/' /etc/ssh/sshd_config
-sed -i 's/^#\?PermitRootLogin.*/PermitRootLogin prohibit-password/' /etc/ssh/sshd_config
-sed -i 's/^#\?X11Forwarding.*/X11Forwarding no/' /etc/ssh/sshd_config
-sed -i 's/^#\?MaxAuthTries.*/MaxAuthTries 3/' /etc/ssh/sshd_config
-sed -i 's/^#\?ClientAliveInterval.*/ClientAliveInterval 300/' /etc/ssh/sshd_config
-sed -i 's/^#\?ClientAliveCountMax.*/ClientAliveCountMax 2/' /etc/ssh/sshd_config
-sshd -t && systemctl restart ssh
+cat > /etc/ssh/sshd_config.d/00-a-hardening.conf <<'EOF'
+Port SSH_PORT
+Port 22
+PubkeyAuthentication yes
+PasswordAuthentication no
+PermitRootLogin prohibit-password
+X11Forwarding no
+MaxAuthTries 3
+ClientAliveInterval 300
+ClientAliveCountMax 2
+EOF
+sshd -t
+systemctl daemon-reload
+systemctl restart ssh.socket
 ```
 
+Обе строки `Port` (новый + `22`) — временно, пока новый порт не подтверждён живым подключением
+с другой машины. Потом убрать `Port 22` и повторить `daemon-reload && restart ssh.socket`.
+
+> [!CAUTION]
+> **Ubuntu 24.04: смена порта — ТОЛЬКО через `Port` в `sshd_config.d/` + `daemon-reload && restart ssh.socket`.**
+> `systemctl restart ssh` в 24.04 не подхватывает новый порт (socket-activation), а ручная правка
+> `/etc/systemd/system/ssh.socket.d/*` отрезает сервер насмерть (ловушка `BindIPv6Only=ipv6-only`).
+> Полный разбор с разбором реального инцидента — [раздел 1.4 основного гайда](./README.md#14-socket-activation--самое-опасное-место-на-ubuntu-2404).
+
 > [!WARNING]
-> **На Ubuntu/Debian с cloud-init простой `PasswordAuthentication no` в конце файла может НЕ сработать** —
-> `Include /etc/ssh/sshd_config.d/*.conf` в начале файла подключает `50-cloud-init.conf` с `yes`, и
-> побеждает **первая** встреченная директива, не последняя. Проверять не `grep`-ом файла, а эффективный
-> конфиг: `sshd -T | grep passwordauthentication` (должно быть `no`). Полный разбор и фикс — в
-> [разделе 1 основного гайда](./README.md#1-ssh).
+> **Проверять не `grep`-ом файла, а эффективным конфигом:** `sshd -T | grep -E 'passwordauthentication|^port '`
+> (должно быть `no` и ваш новый порт). Полный разбор граблей cloud-init — [раздел 1.3](./README.md#13-грабля-cloud-init--первая-директива-побеждает).
 
 > [!IMPORTANT]
 > Перед выключением пароля — обязательно проверить вход по ключу в **новой** SSH-сессии, не закрывая
@@ -153,8 +164,10 @@ sshd -t && systemctl restart ssh
 ## 5) Fail2ban для SSH
 
 ```bash
-mkdir -p /etc/fail2ban
 cat > /etc/fail2ban/jail.local <<'EOF'
+[DEFAULT]
+ignoreip = 127.0.0.1/8 ::1
+
 [sshd]
 enabled  = true
 port     = SSH_PORT
@@ -163,15 +176,17 @@ backend  = systemd
 findtime = 600
 maxretry = 3
 bantime  = 1h
+action   = nftables[name=SSH, port=SSH_PORT, protocol=tcp]
 EOF
 systemctl enable --now fail2ban
 fail2ban-client status sshd
 ```
 
 > [!CAUTION]
-> Когда дойдёте до firewall (nftables) — `action` в jail должен банить по **явному номеру** `SSH_PORT`,
-> а не алиасу `port=ssh` (тот резолвится в 22 через `/etc/services`, даже если SSH реально висит на другом
-> порту — бан молча не сработает). Подробности — [раздел 2 основного гайда](./README.md#2-fail2ban).
+> `action` банит по **явному номеру** `SSH_PORT`, а не алиасу `port=ssh` — тот резолвится в 22 через
+> `/etc/services`, даже если SSH реально на другом порту, и бан молча не сработает (проверено: так
+> «работали» правила на 9 из 14 нод реального парка). Джейлы `recidive` и `portscan` (ловушка на
+> сканеров) — [раздел 2 основного гайда](./README.md#2-fail2ban).
 
 ---
 
@@ -194,13 +209,18 @@ apt-cache policy sudo
 ```bash
 cat > /etc/sysctl.d/98-hygiene.conf <<'EOF'
 net.ipv4.tcp_syncookies = 1
-net.ipv4.conf.all.rp_filter = 1
-net.ipv4.conf.default.rp_filter = 1
+net.ipv4.conf.all.rp_filter = 2
+net.ipv4.conf.default.rp_filter = 2
 net.ipv4.icmp_echo_ignore_broadcasts = 1
 net.ipv4.icmp_ignore_bogus_error_responses = 1
 EOF
 sysctl --system
 ```
+
+> [!NOTE]
+> `rp_filter = 2` (loose), а не `1` (strict) — для Xray-нод разницы нет (клиентский трафик не
+> маршрутизируется ядром), но если на ноде есть WireGuard-каскад или policy-routing с несколькими
+> таблицами, strict-режим молча роняет пакеты с асимметричным маршрутом. Loose безопаснее по умолчанию.
 
 > [!NOTE]
 > Это базовая гигиена, не тюнинг под VPN-трафик. Полный профиль BBR/`fq` с готовыми пресетами под
@@ -271,7 +291,9 @@ sudo journalctl -p err -b --no-pager
 - [ ] Создан отдельный sudo-пользователь, не работаем под root.
 - [ ] Вход по SSH только по ключам (`sshd -T | grep passwordauthentication` → `no`), пароль отключён
       **после** проверки входа по ключу в новой сессии.
-- [ ] `fail2ban` активен, jail `sshd` видит нужный порт.
+- [ ] Порт сменён через drop-in `sshd_config.d/` + `daemon-reload && restart ssh.socket` (не `restart ssh`,
+      не ручной `ssh.socket.d/`), новый порт подтверждён подключением **с другой машины**.
+- [ ] `fail2ban` активен, jail `sshd` банит по **явному номеру** порта (не `port=ssh`).
 - [ ] `sudo` проверен на CVE-2025-32463.
 - [ ] Базовая сетевая гигиена (`sysctl`) применена.
 - [ ] Время (UTC) и DNS в порядке.
