@@ -131,6 +131,14 @@ systemctl list-units 'ssh*'
 
 Есть третий, невидимый участник — генератор `/usr/lib/systemd/system-generators/sshd-socket-generator`. При **каждом** `systemctl daemon-reload` он сам читает `Port` из `sshd_config` (включая ваши `.conf` из `sshd_config.d/`) и пишет `/run/systemd/generator/ssh.socket.d/addresses.conf` с правильным dual-stack:
 
+> [!CAUTION]
+> **Генератор есть не на всех образах.** Он появился в systemd 256 и бэкпортирован в
+> Ubuntu 24.04.1+ (пакет `255.4-1ubuntu8.x`). На чистой 24.04.0 или урезанном
+> образе провайдера его может **не быть** — тогда `Port` из `sshd_config` для сокета
+> игнорируется полностью, и `daemon-reload && restart ssh.socket` оставляет вас на
+> порту 22. Проверить: `test -x /usr/lib/systemd/system-generators/sshd-socket-generator`.
+> Нет генератора → только «Запасной вариант» ниже (отключить socket-activation).
+
 ```ini
 [Socket]
 ListenStream=
@@ -156,14 +164,17 @@ Port 22
 Port 22132
 EOF
 
-# 2. Проверить синтаксис ДО применения
+# 2. Каталог privsep — иначе следующий шаг падает "Missing privilege separation directory"
+mkdir -p /run/sshd && chmod 0755 /run/sshd
+
+# 3. Проверить синтаксис ДО применения. Ошибка → чинить файл, НЕ делать restart.
 sshd -t
 
-# 3. Перегенерировать сокет и перезапустить — НИКАКИХ ручных ssh.socket.d/*
+# 4. Перегенерировать сокет и перезапустить — НИКАКИХ ручных ssh.socket.d/*
 systemctl daemon-reload
 systemctl restart ssh.socket
 
-# 4. Сверить, что слушают ОБА семейства адресов
+# 5. Сверить, что слушают ОБА семейства адресов
 ss -tlnp | grep -E 'sshd|:22132'
 sshd -T | grep -i '^port'
 ```

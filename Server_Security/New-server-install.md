@@ -110,7 +110,15 @@ sudo -v
 
 ## 4) SSH-ключи и жёсткий SSH
 
-На сервере (под нужным пользователем) — замените строку с ключом на свой публичный ключ:
+> [!CAUTION]
+> Это шаг, на котором чаще всего теряют доступ к серверу. Не закрывайте текущую
+> SSH-сессию, пока новый вход не проверен из **отдельного** окна. Если у провайдера
+> есть VNC/консоль восстановления — заранее убедитесь, что вы знаете, как в неё зайти.
+
+### 4.1 Ключ
+
+На сервере (под нужным пользователем) добавьте **свой** публичный ключ. Приватный
+остаётся на вашем ПК, на сервер он не попадает никогда.
 
 ```bash
 mkdir -p ~/.ssh && chmod 700 ~/.ssh
@@ -120,48 +128,161 @@ EOF
 chmod 600 ~/.ssh/authorized_keys
 ```
 
-**Не редактируем сам `/etc/ssh/sshd_config`** — только свой drop-in, который сортируется РАНЬШЕ
-cloud-init по алфавиту (иначе `50-cloud-init.conf` с `PasswordAuthentication yes` победит — у sshd
-выигрывает **первая** встреченная директива, не последняя):
+Тут же, из другого окна, проверьте что вход по ключу работает (пока с портом 22 и
+ещё включённым паролем — просто убедиться, что ключ принят):
 
 ```bash
-cat > /etc/ssh/sshd_config.d/00-a-hardening.conf <<'EOF'
-Port SSH_PORT
+ssh -o PreferredAuthentications=publickey USER@SERVER_IP
+```
+
+### 4.2 Выбор порта
+
+```bash
+SSH_PORT=22222          # ← ваш порт: 1024–65535, любой кроме 22.
+```
+
+Все команды ниже используют переменную `$SSH_PORT` — подставьте её один раз и
+копируйте блоки как есть. В **конфигурационные файлы** (`sshd_config.d`, `jail.local`)
+переменная не подставится — там номер придётся вписать руками, это отмечено.
+
+Смена порта — это защита только от фонового шума автосканеров (меньше строк в логах,
+меньше нагрузки на fail2ban). От целевой атаки не спасает. Ключи + fail2ban важнее.
+
+### 4.3 Каталог privilege separation
+
+```bash
+mkdir -p /run/sshd && chmod 0755 /run/sshd
+```
+
+`/run` — это tmpfs, каталог `/run/sshd` пересоздаётся при старте `ssh.service`
+(`RuntimeDirectory=sshd`). Но `sshd -t` его сам **не создаёт** и падает с
+`Missing privilege separation directory: /run/sshd`, а вместе с ним падает
+`ExecStartPre=/usr/sbin/sshd -t` в юните — и sshd не стартует вообще. Одна строка
+выше снимает эту грабль.
+
+### 4.4 Конфиг sshd (drop-in, не сам `sshd_config`)
+
+Правим **только** свой файл в `sshd_config.d/`. Имя `00-a-…` — чтобы он сортировался
+**раньше** `50-cloud-init.conf`: у sshd выигрывает **первая** встреченная директива,
+а не последняя, и `50-cloud-init.conf` с `PasswordAuthentication yes` иначе победит.
+
+```bash
+cat > /etc/ssh/sshd_config.d/00-a-hardening.conf <<EOF
+Port ${SSH_PORT}
 Port 22
 PubkeyAuthentication yes
 PasswordAuthentication no
+KbdInteractiveAuthentication no
 PermitRootLogin prohibit-password
 X11Forwarding no
 MaxAuthTries 3
 ClientAliveInterval 300
 ClientAliveCountMax 2
 EOF
-sshd -t
-systemctl daemon-reload
-systemctl restart ssh.socket
 ```
 
-Обе строки `Port` (новый + `22`) — временно, пока новый порт не подтверждён живым подключением
-с другой машины. Потом убрать `Port 22` и повторить `daemon-reload && restart ssh.socket`.
+Вторая строка `Port 22` — временная страховка на время перехода. Уберёте её позже,
+когда новый порт подтверждён.
+
+```bash
+sshd -t && echo "=== config OK ==="
+```
 
 > [!CAUTION]
-> **Ubuntu 24.04: смена порта — ТОЛЬКО через `Port` в `sshd_config.d/` + `daemon-reload && restart ssh.socket`.**
-> `systemctl restart ssh` в 24.04 не подхватывает новый порт (socket-activation), а ручная правка
-> `/etc/systemd/system/ssh.socket.d/*` отрезает сервер насмерть (ловушка `BindIPv6Only=ipv6-only`).
-> Полный разбор с разбором реального инцидента — [раздел 1.4 основного гайда](./README.md#14-socket-activation--самое-опасное-место-на-ubuntu-2404).
+> Если `sshd -t` вывел **любую** ошибку — **остановитесь и почините файл**. Не
+> делайте `restart`: перезапуск со сломанным конфигом = потеря доступа. Частые
+> причины: вписали `Port SSH_PORT` вместо числа; забыли шаг 4.3; лишний символ
+> после nano.
+
+### 4.5 Применить порт — выберите ОДИН вариант
+
+В Ubuntu 24.04 слушающим сокетом SSH по умолчанию управляет **не sshd, а systemd**
+(`ssh.socket`). Поэтому просто `systemctl restart ssh` новый порт **не подхватывает**.
+Два рабочих пути:
+
+#### Вариант A — отключить socket-activation (рекомендуется)
+
+`Port` из `sshd_config` начинает работать ровно так, как во всех обычных гайдах.
+Минус только один: sshd занимает ~5 МБ ОЗУ постоянно, а не поднимается по первому
+коннекту — на сервере это неважно.
+
+```bash
+systemctl disable --now ssh.socket
+systemctl unmask ssh.service 2>/dev/null || true
+systemctl enable --now ssh.service
+systemctl restart ssh.service
+```
+
+#### Вариант B — оставить socket-activation (дефолт Ubuntu 24.04)
+
+Работает, если в systemd есть генератор `sshd-socket-generator` (Ubuntu 24.04.1+ и
+свежие обновления 24.04). Он при **каждом** `daemon-reload` читает `Port` из
+`sshd_config.d/` и сам настраивает сокет на нужный порт (dual-stack).
+
+```bash
+test -x /usr/lib/systemd/system-generators/sshd-socket-generator \
+  && { systemctl daemon-reload && systemctl restart ssh.socket; echo "socket-activation: OK"; } \
+  || echo "!!! генератора НЕТ — используйте Вариант A"
+```
+
+> [!CAUTION]
+> **Никогда не создавайте и не редактируйте `/etc/systemd/system/ssh.socket.d/*`
+> вручную.** Голый `ListenStream=<порт>` под унаследованной из базового юнита
+> директивой `BindIPv6Only=ipv6-only` поднимает **только IPv6-сокет**, `ss -tlnp`
+> показывает его так же, как dual-stack — отличить нельзя, снаружи `Connection
+> refused` по обоим адресам. Разбор реального инцидента (закончился переустановкой
+> ОС) — [раздел 1.4 основного гайда](./README.md#14-socket-activation--самое-опасное-место-на-ubuntu-2404).
+
+### 4.6 Проверка (обязательно, до закрытия текущей сессии)
+
+```bash
+sshd -T | grep -E '^(port|passwordauthentication|permitrootlogin|pubkeyauthentication) '
+ss -tlnp | grep -E ":($SSH_PORT|22)\b"
+systemctl is-active ssh.service
+```
+
+Ожидаем: `port $SSH_PORT` (и `port 22`), `passwordauthentication no`,
+`permitrootlogin without-password`, сокет слушает на новом порту, сервис `active`.
 
 > [!WARNING]
-> **Проверять не `grep`-ом файла, а эффективным конфигом:** `sshd -T | grep -E 'passwordauthentication|^port '`
-> (должно быть `no` и ваш новый порт). Полный разбор граблей cloud-init — [раздел 1.3](./README.md#13-грабля-cloud-init--первая-директива-побеждает).
+> Проверяем **эффективный** конфиг (`sshd -T`), а не `grep`-ом файла — из-за
+> правила «первая директива побеждает» файл может выглядеть верно, а работать иначе
+> (полный разбор — [раздел 1.3](./README.md#13-грабля-cloud-init--первая-директива-побеждает)).
+
+Затем из **нового** окна на другой машине:
+
+```bash
+ssh -p $SSH_PORT USER@SERVER_IP
+```
+
+Зашло по ключу — только теперь можно закрыть первую сессию. **Пароль уже отключён**
+(`PasswordAuthentication no` в 4.4) — если бы вход по ключу не работал, вы бы это
+увидели здесь, ещё имея живую первую сессию.
+
+### 4.7 Убрать страховочный порт 22
+
+Когда новый порт подтверждён:
+
+```bash
+sed -i '/^Port 22$/d' /etc/ssh/sshd_config.d/00-a-hardening.conf
+sshd -t && systemctl restart ssh.service      # Вариант A
+# или, для Варианта B:  sshd -t && systemctl daemon-reload && systemctl restart ssh.socket
+```
 
 > [!IMPORTANT]
-> Перед выключением пароля — обязательно проверить вход по ключу в **новой** SSH-сессии, не закрывая
-> текущую. Заранее откройте `SSH_PORT` в firewall, когда будете его настраивать (шаг 9) — иначе рискуете
-> потерять доступ при смене порта.
+> Порт `$SSH_PORT` нужно **открыть в firewall** (шаг 9, nftables) и, если у провайдера
+> есть внешний firewall в панели (Aeza, Hetzner Cloud, Oracle и т.п.) — **и там тоже**.
+> Открывайте новый порт **до** того, как уберёте `Port 22` и правило для 22.
 
 ---
 
 ## 5) Fail2ban для SSH
+
+fail2ban читает журнал systemd, находит неудачные попытки входа и банит IP через
+nftables. Ставили пакет в шаге 2.
+
+Впишите **свой номер порта** вместо `SSH_PORT` в двух местах (это конфиг-файл,
+переменная `$SSH_PORT` тут не сработает):
 
 ```bash
 cat > /etc/fail2ban/jail.local <<'EOF'
@@ -178,15 +299,35 @@ maxretry = 3
 bantime  = 1h
 action   = nftables[name=SSH, port=SSH_PORT, protocol=tcp]
 EOF
+
+sed -i "s/SSH_PORT/$SSH_PORT/g" /etc/fail2ban/jail.local   # подставит номер, если $SSH_PORT ещё в этой сессии
+grep -E 'port|action' /etc/fail2ban/jail.local             # убедиться, что стоит число, а не SSH_PORT
+
 systemctl enable --now fail2ban
 fail2ban-client status sshd
 ```
 
 > [!CAUTION]
-> `action` банит по **явному номеру** `SSH_PORT`, а не алиасу `port=ssh` — тот резолвится в 22 через
-> `/etc/services`, даже если SSH реально на другом порту, и бан молча не сработает (проверено: так
-> «работали» правила на 9 из 14 нод реального парка). Джейлы `recidive` и `portscan` (ловушка на
-> сканеров) — [раздел 2 основного гайда](./README.md#2-fail2ban).
+> В `action` — **явный номер** порта, а не алиас `port=ssh`: тот резолвится в 22
+> через `/etc/services`, даже если SSH на другом порту, и бан молча не срабатывает
+> (проверено: так «работали» правила на 9 из 14 нод реального парка).
+
+> [!NOTE]
+> `backend = systemd` + `filter = sshd` работает на Ubuntu 24.04 «из коробки», в том
+> числе при socket-activation: сокет отдаёт соединение единому `ssh.service`
+> (`Accept=no`), sshd пишет в журнал как `_COMM=sshd` под `ssh.service`, а стандартный
+> `journalmatch = _SYSTEMD_UNIT=sshd.service` матчится через штатный алиас
+> `sshd.service → ssh.service`. Проверить, что джейл реально видит события:
+> `fail2ban-client status sshd` → ненулевой `Total failed` после нескольких
+> неудачных попыток.
+
+> [!IMPORTANT]
+> **После смены порта SSH** обязательно поправьте `port`/`action` в `jail.local`
+> на новый номер и `systemctl restart fail2ban` — иначе jail слушает старый порт
+> и правило бана создаётся не на тот порт.
+
+Джейлы `recidive` (повторные баны — дольше) и `portscan` (ловушка на сканеров) —
+[раздел 2 основного гайда](./README.md#2-fail2ban).
 
 ---
 
@@ -289,11 +430,15 @@ sudo journalctl -p err -b --no-pager
 - [ ] Система обновлена и перезагружена.
 - [ ] Поставлены пакеты для администрирования/диагностики.
 - [ ] Создан отдельный sudo-пользователь, не работаем под root.
-- [ ] Вход по SSH только по ключам (`sshd -T | grep passwordauthentication` → `no`), пароль отключён
-      **после** проверки входа по ключу в новой сессии.
-- [ ] Порт сменён через drop-in `sshd_config.d/` + `daemon-reload && restart ssh.socket` (не `restart ssh`,
-      не ручной `ssh.socket.d/`), новый порт подтверждён подключением **с другой машины**.
-- [ ] `fail2ban` активен, jail `sshd` банит по **явному номеру** порта (не `port=ssh`).
+- [ ] `mkdir /run/sshd` сделан, `sshd -t` проходит без ошибок.
+- [ ] Вход по SSH только по ключам (`sshd -T | grep passwordauthentication` → `no`), пароль отключён,
+      вход по ключу подтверждён из **новой** сессии на **другой машине**.
+- [ ] Порт сменён одним из вариантов: **A** — `disable ssh.socket` + `enable ssh.service` (`Port` из
+      `sshd_config.d/` работает), **B** — оставлен `ssh.socket` + `daemon-reload` (нужен
+      `sshd-socket-generator`). Ручной `ssh.socket.d/` — НИКОГДА. `sshd -T | grep '^port '` и
+      `ss -tlnp` показывают новый порт.
+- [ ] `fail2ban` активен, jail `sshd` слушает **новый** порт и банит по **явному номеру** (не `port=ssh`);
+      после смены порта `jail.local` обновлён и `fail2ban` перезапущен.
 - [ ] `sudo` проверен на CVE-2025-32463.
 - [ ] Базовая сетевая гигиена (`sysctl`) применена.
 - [ ] Время (UTC) и DNS в порядке.
