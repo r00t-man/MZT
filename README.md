@@ -16,6 +16,7 @@
 
 [![Scripts](https://img.shields.io/badge/Scripts-install-blue?style=for-the-badge&logo=gnubash)](#-one-click-install)
 [![Server Security](https://img.shields.io/badge/Server%20Security-hardening-red?style=for-the-badge&logo=letsencrypt)](#-server-security)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-AI%20assistant-orange?style=for-the-badge&logo=anthropic)](./Claude_info/README.md)
 [![Remnawave](https://img.shields.io/badge/Remnawave-panel%20%2B%20nodes-teal?style=for-the-badge&logo=v2ray)](https://github.com/r00t-man/MZT/tree/main/Remnawave)
 [![Wiki](https://img.shields.io/badge/Wiki-server%20knowledge-purple?style=for-the-badge&logo=github)](https://github.com/r00t-man/MZT/tree/main/wiki)
 
@@ -89,6 +90,22 @@ sudo bash -c 'curl -fsSL https://raw.githubusercontent.com/r00t-man/MZT/refs/hea
 
 ---
 
+# 🤖 Claude Code — AI DevOps-ассистент на сервере
+
+Гайды по установке [Claude Code](https://claude.com/product/claude-code) прямо на свой сервер как
+дежурного ИИ-ассистента для диагностики и администрирования. Есть два варианта — под разные задачи:
+
+- 🛡️ **[Защищённая установка](./Claude_info/README.md)** — с трёхслойной моделью безопасности
+  (allow/deny в `settings.json` + жёсткий детерминированный хук `guard.sh`), заточена под прод-сервер
+  с Docker/Remnawave: блокирует необратимые команды (снос томов, firewall, SSH-локаут, утечку
+  секретов) на уровне кода, а не только на уровне «агент сам не станет».
+- 🧼 **[Чистая установка](./Claude_info/Clean-install.md)** — без хука, без урезанных прав, без
+  привязки к какой-либо инфраструктуре: Claude Code со стандартными настройками «из коробки», защита —
+  только ручное подтверждение каждой изменяющей команды. Подходит для тестового/расходного сервера
+  или когда хочешь сам настроить `permissions` под себя.
+
+---
+
 # 🌊 Remnawave — панель, ноды и профили
 
 Отдельный раздел про эксплуатацию **Remnawave**: развёртывание всего стека с нуля (панель + бот +
@@ -140,6 +157,10 @@ MZT
 ├── Server_Security
 │   ├── README.md   (единый гайд — SSH/fail2ban/nftables/sysctl/sudo/IPv6/DNS)
 │   └── New-server-install.md   (копипаст-чеклист нового сервера, без firewall)
+│
+├── Claude_info
+│   ├── README.md          (защищённая установка — settings.json + guard.sh + setup-wizard.sh)
+│   └── Clean-install.md   (чистая установка — без хука и ограничений, дефолтные настройки)
 │
 ├── Remnawave
 │   ├── README.md   (меню — что внутри и куда сразу перейти)
