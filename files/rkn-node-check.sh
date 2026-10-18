@@ -22,7 +22,7 @@
 # Доступность Node Port из интернета проверяйте с отдельной машины через --remote.
 
 set -u
-VERSION="1.2-offline (16.10.2026)"
+VERSION="1.3-offline (18.10.2026)"
 
 REMOTE="" SNI="" NODE_PORT="" COLOR=1
 usage() {
@@ -167,7 +167,7 @@ if [ -n "$REMOTE" ]; then
     if [ -n "$hsts" ]; then
       ma=$(echo "$hsts" | grep -oiE 'max-age=[0-9]+' | cut -d= -f2)
       if [ "${ma:-0}" -ge 15552000 ]; then mark 5 OK "HSTS: ${hsts#*: }"; else mark 5 WARN "HSTS есть, но max-age ${ma:-0} мало (нужно от 15552000, лучше 31536000)"; fi
-    else mark 5 FAIL "нет заголовка Strict-Transport-Security"; fi
+    else mark 5 FAIL "нет заголовка Strict-Transport-Security"; mark 5 INFO "если HSTS стоит в server{}, но тест всё равно FAIL — проверьте location, отдающий сайт: если там свой add_header (напр. Cache-Control), серверные add_header для него игнорируются целиком, включая HSTS; повторите строку HSTS внутри этого location"; fi
   else mark 5 SKIP "нужен --sni"; fi
 else
 # ═════════════════════════════════════ режим «на ноде» ═════════════════════════════════════════════════
@@ -446,7 +446,7 @@ PYEOF
       ma=$(echo "$hsts" | grep -oiE 'max-age=[0-9]+' | cut -d= -f2)
       if [ "${ma:-0}" -ge 15552000 ]; then mark 5 OK "HSTS: ${hsts#*: }"; else mark 5 WARN "HSTS есть, но max-age ${ma:-0} мало (нужно от 15552000, лучше 31536000)"; fi
     elif [ -z "$h" ]; then mark 5 FAIL "https://$SNI/ не ответил"
-    else mark 5 FAIL "нет заголовка Strict-Transport-Security"; fi
+    else mark 5 FAIL "нет заголовка Strict-Transport-Security"; mark 5 INFO "если HSTS стоит в server{}, но тест всё равно FAIL — проверьте location, отдающий сайт: если там свой add_header (напр. Cache-Control), серверные add_header для него игнорируются целиком, включая HSTS; повторите строку HSTS внутри этого location"; fi
   else mark 5 SKIP "домен заглушки не найден — укажите --sni"; fi
 fi
 
