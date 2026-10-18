@@ -1,7 +1,6 @@
-# Что делать с этим архивом после установки AI DevOps-ассистента
+# 🔄 Перенос памяти и настроек на новый сервер
 
-Эта инструкция — для сервера, где уже пройдена официальная установка по
-[r00t-man/MZT/Claude_info](https://github.com/r00t-man/MZT/tree/main/Claude_info)
+Эта инструкция — для сервера, где уже пройдена [защищённая установка](hardened-install/README.md)
 (Claude Code нативно, `/opt/.claude/settings.json`, `/opt/.claude/hooks/guard.sh`,
 `/opt/CLAUDE.md`, шаг 4 проверки хука пройден — `guard.sh` реально блокирует).
 

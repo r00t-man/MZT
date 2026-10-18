@@ -1,16 +1,14 @@
-# Внешние материалы (переведённые)
+# 📚 Обучающие материалы
 
-Сторонние/внешние материалы по Claude Code и агентам, которые перевели или законспектировали
-для удобства — отдельно от собственных файлов настройки (`guard.sh`, `settings.json`,
-`CLAUDE.md.example` и т.п. в корне `Claude_info/`), чтобы не путать "как мы настроили"
-с "что почитать по теме".
+Материалы для изучения Claude Code и агентных CLI-инструментов на русском — отдельно от файлов
+готовой установки (`guard.sh`, `settings.json`, `CLAUDE.md.example` в
+[hardened-install/](../hardened-install/)), чтобы не путать «как развернуть» с «что почитать по теме».
 
-- **[claude-code-everything-you-need-to-know/](claude-code-everything-you-need-to-know/)** —
-  полный перевод независимого (не Anthropic) обучающего гайда по Claude Code: README, все 61
-  урока (beginner/intermediate/advanced), CHANGELOG/CONTRIBUTING/SECURITY. MIT. Код-примеры
-  скопированы без перевода. См. `SOURCE.md` внутри.
-- **[anthropic-building-effective-agent-automations.ru.md](anthropic-building-effective-agent-automations.ru.md)** —
-  конспект (не перевод — чужой копирайт) официального поста Anthropic про то, как надёжно
-  строить scheduled-агентов (bookmark вместо фиксированного окна, подтверждение доставки до
-  записи статуса, свежее чтение предпочтений, узкие права, лимит расходов). Прямо применимо к
-  нашим cron-ботам.
+- **[Claude Code: полное руководство](claude-code-everything-you-need-to-know/)** — от первого
+  запуска до продвинутых паттернов: параллельные сессии, хуки, субагенты, MCP, плагины, CI,
+  dev-контейнеры. 61 урок с практическими проверками на трёх уровнях сложности
+  (beginner/intermediate/advanced). MIT, атрибуция — в `LICENSE` и `SOURCE.md` внутри папки.
+- **[Надёжные scheduled-агенты](anthropic-building-effective-agent-automations.ru.md)** — как
+  строить cron-ботов так, чтобы они не теряли события и не ломались на рестарте: bookmark вместо
+  фиксированного окна, подтверждение доставки до записи статуса, свежее чтение настроек, узкие
+  права, лимит расходов. Применимо к любому боту на расписании.
