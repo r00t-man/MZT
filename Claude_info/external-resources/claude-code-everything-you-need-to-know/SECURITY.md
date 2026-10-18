@@ -1,0 +1,9 @@
+# Политика безопасности
+
+В корневой папке этого репозитория [`.claude/`](https://github.com/wesammustafa/Claude-Code-Everything-You-Need-to-Know/tree/main/.claude) нет хуков и разрешающих правил: только запрещающее правило для чтения файлов `.env`, навык [`claude-md-review`](https://github.com/wesammustafa/Claude-Code-Everything-You-Need-to-Know/blob/main/.claude/skills/claude-md-review/SKILL.md) и рабочий процесс [`stale-docs-audit`](https://github.com/wesammustafa/Claude-Code-Everything-You-Need-to-Know/blob/main/.claude/workflows/stale-docs-audit.js). Клонирование репозитория и доверие к папке в Claude Code само по себе ничего не запускает. Навык загружается, когда вы или Claude вызываете его, и может читать файлы без запроса в течение хода, в котором он вызван (в его `allowed-tools` перечислены Read, Glob и Grep), а рабочий процесс запускается, когда вы его запускаете. Готовые к копированию примеры для уроков находятся в `examples/`, по путям, которые Claude Code не загружает, и остаются неактивными, пока вы не скопируете их в проект. Просматривайте каждый файл перед копированием, так же как вы просматривали бы shell-скрипт (руководство учит тому же в [Enforce a rule with a hook](docs/intermediate/05-hooks.md#watch-out)).
+
+## Сообщение об уязвимости
+
+Если вы обнаружите проблему безопасности в любом скрипте или инструкции в этом репозитории — например, хук, которым можно злоупотребить, небезопасную команду в пошаговом руководстве или ссылку, ведущую куда-то вредоносное — пожалуйста, сообщите об этом конфиденциально через [GitHub security https://github.com/wesammustafa/Claude-Code-Everything-You-Need-to-Know/security/advisories/new а не через публичную issue.
+
+Проблемы в самом Claude Code следует направлять в [anthropics/claude-code](https://github.com/anthropics/claude-code/issues) или в программу Anthropic [responsible disclosure program](https://www.anthropic.com/responsible-disclosure-policy).

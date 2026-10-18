@@ -1,0 +1,16 @@
+<a id="claude-skills--the-complete-guide"></a>
+# Skills
+
+Эта страница переехала. Навыки рассматриваются в уроке среднего уровня [Turn a repeated workflow into a skill](intermediate/01-first-skill.md) и элективе [Skill patterns](intermediate/electives/skill-patterns.md), а [Skills topic index](topics/skills.md) перечисляет все страницы о них.
+
+<a id="what-are-skills"></a><a id="what-are-claude-skills"></a><a id="two-flavors-of-skills"></a><a id="where-claude-looks"></a><a id="where-claude-looks-for-name"></a><a id="contents"></a><a id="quickstart-your-first-skill-3-minutes"></a><a id="creating-custom-skills"></a><a id="skill-file-requirements"></a><a id="step-by-step-building-your-first-skill"></a><a id="skills-faq"></a>Что такое навык, где он находится и как написать свой первый: [Turn a repeated workflow into a skill](intermediate/01-first-skill.md).
+
+<a id="skills-best-practices"></a><a id="-do"></a><a id="-dont"></a><a id="passing-arguments-to-skills"></a><a id="advanced-patterns"></a><a id="performance-considerations"></a><a id="troubleshooting-skills"></a><a id="common-issues"></a><a id="debugging-tips"></a><a id="error-messages"></a><a id="version-requirements"></a><a id="edge-cases--gotchas"></a>Аргументы, живые данные, вспомогательные файлы, разветвлённый контекст, предоставление инструментов и устранение неполадок: электив [Skill patterns](intermediate/electives/skill-patterns.md).
+
+<a id="the-skills-ecosystem"></a><a id="official-anthropic-resources"></a><a id="marketplaces--registries"></a><a id="curated-awesome-lists"></a><a id="notable-community-skills-by-category"></a><a id="engineering--development"></a><a id="quality-review--debugging"></a><a id="skill--tool-development"></a><a id="-skill-installer"></a><a id="reasoning--process"></a><a id="research--business"></a><a id="memory-context--ops"></a><a id="workflow--collaboration"></a><a id="output-formats--creative"></a><a id="installing-a-community-skill"></a>Получение навыков с торговых площадок и их установка: [Install and manage plugins](intermediate/08-plugins.md).
+
+<a id="built-in-vs-custom-skills"></a><a id="built-in-skills-vs-custom-skills"></a>Навыки, входящие в состав Claude Code: официальный [commands reference](https://code.claude.com/docs/en/commands) перечисляет их, помечая **Skill** в столбце Purpose (см. также [bundled skills](https://code.claude.com/docs/en/skills#bundled-skills)).
+
+<a id="available-skills-reference"></a><a id="-workflow--process"></a><a id="-quality--review"></a><a id="-persona--methodology"></a><a id="-task-management"></a><a id="using-skills-in-workflow"></a><a id="using-skills-in-your-workflow"></a><a id="recipe-1-complete-feature-development"></a><a id="recipe-2-bug-investigation--resolution"></a><a id="recipe-3-ux-focused-development"></a>Собственный каталог навыков этого репозитория и его рецепты рабочих процессов были удалены в издании v2026.10 вместе с описанными в них slash-командами: см. [CHANGELOG](../CHANGELOG.md#removed-live-config). Чтобы запустить навык, см. [Turn a repeated workflow into a skill](intermediate/01-first-skill.md).
+
+<a id="frontmatter-reference"></a>Каждое поле frontmatter: официальный [frontmatter reference](https://code.claude.com/docs/en/skills#frontmatter-reference).

@@ -6,8 +6,9 @@
 с "что почитать по теме".
 
 - **[claude-code-everything-you-need-to-know/](claude-code-everything-you-need-to-know/)** —
-  перевод README + каталог уроков независимого (не Anthropic) обучающего гайда по Claude Code,
-  MIT. См. `SOURCE.md` внутри.
+  полный перевод независимого (не Anthropic) обучающего гайда по Claude Code: README, все 61
+  урока (beginner/intermediate/advanced), CHANGELOG/CONTRIBUTING/SECURITY. MIT. Код-примеры
+  скопированы без перевода. См. `SOURCE.md` внутри.
 - **[anthropic-building-effective-agent-automations.ru.md](anthropic-building-effective-agent-automations.ru.md)** —
   конспект (не перевод — чужой копирайт) официального поста Anthropic про то, как надёжно
   строить scheduled-агентов (bookmark вместо фиксированного окна, подтверждение доставки до

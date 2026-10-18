@@ -1,0 +1,8 @@
+<a id="agent-teams--the-complete-guide"></a>
+# Agent teams
+
+Эта страница переехала. Запуск команды агентов рассматривается в продвинутом элективе [Agent teams](advanced/electives/agent-teams.md), а выбор между субагентами, динамическим рабочим процессом и командой — в продвинутом уроке [Choose an orchestration pattern](advanced/02-orchestration-patterns.md).
+
+<a id="contents"></a><a id="enable-it"></a><a id="your-first-team"></a><a id="reuse-your-existing-agent-definitions"></a><a id="models-and-effort"></a><a id="display-modes"></a><a id="talking-to-teammates"></a><a id="plan-approval"></a><a id="the-shared-task-list"></a><a id="quality-gates-with-hooks"></a><a id="architecture"></a><a id="permissions"></a><a id="what-teammates-know"></a><a id="two-patterns-that-earn-their-cost"></a><a id="parallel-code-review-with-distinct-lenses"></a><a id="competing-hypotheses--the-scientific-debate"></a><a id="best-practices"></a><a id="troubleshooting"></a><a id="limitations"></a><a id="see-also"></a>Включение команд, формирование команды из определений субагентов, панель агента и список задач, разрешения, стоимость и ограничения, со ссылками на официальные разделы о режимах отображения, утверждении плана и контроле качества: электив [Agent teams](advanced/electives/agent-teams.md). Архитектура команды и исправления распространённых проблем: официальные разделы [Architecture](https://code.claude.com/docs/en/agent-teams#architecture) и [Troubleshooting](https://code.claude.com/docs/en/agent-teams#troubleshooting).
+
+<a id="teams-vs-subagents"></a>Выбор между субагентами, динамическим рабочим процессом и командой агентов: [Choose an orchestration pattern](advanced/02-orchestration-patterns.md).
