@@ -1,4 +1,4 @@
-# Claude Code: всё, что вам нужно знать <img src="assets/brand/claude-jumping.svg" width="44" height="40" alt="Анимированный Claude" align="right" />
+# Claude Code: всё, что вам нужно знать <img src="https://raw.githubusercontent.com/wesammustafa/Claude-Code-Everything-You-Need-to-Know/main/assets/brand/claude-jumping.svg" width="44" height="40" alt="Анимированный Claude" align="right" />
 
 **Изучите Claude Code на трёх уровнях: от первой сессии до автономных запусков с несколькими агентами.**
 
@@ -9,7 +9,7 @@
 
 <p align="center">
   <!-- Захвачено с Claude Code v2.1.292 (stable) 2026-10-17. -->
-  <img src="assets/readme/learn-welcome.gif" width="640" alt="Пип, маскот приложения, просыпается, смотрит влево, вправо и вверх, улыбается, затем отдыхает рядом с приветствием. Вы держите два терминала открытыми рядом: в этом запускается npm run learn, показывает по одному шагу и проверяет вашу работу, а в другом вы вводите команды и запускаете Claude Code." />
+  <img src="https://raw.githubusercontent.com/wesammustafa/Claude-Code-Everything-You-Need-to-Know/main/assets/readme/learn-welcome.gif" width="640" alt="Пип, маскот приложения, просыпается, смотрит влево, вправо и вверх, улыбается, затем отдыхает рядом с приветствием. Вы держите два терминала открытыми рядом: в этом запускается npm run learn, показывает по одному шагу и проверяет вашу работу, а в другом вы вводите команды и запускаете Claude Code." />
   <br />
   <sub>Учебное приложение, <code>npm run learn</code>, при первом запуске.</sub>
 </p>
@@ -38,8 +38,8 @@
 
 <table>
   <tr>
-    <td width="50%" valign="top"><img src="assets/readme/learn-help-guided.png" width="380" alt="На шаге 1 приложение называет окно для ввода, объясняет словами урока и показывает точную команду установки." /></td>
-    <td width="50%" valign="top"><img src="assets/readme/learn-help-challenge.png" width="380" alt="К шагу 11 приложение даёт только цель и правило урока, а из git status сообщает, что в копии ещё ничего не изменилось." /></td>
+    <td width="50%" valign="top"><img src="https://raw.githubusercontent.com/wesammustafa/Claude-Code-Everything-You-Need-to-Know/main/assets/readme/learn-help-guided.png" width="380" alt="На шаге 1 приложение называет окно для ввода, объясняет словами урока и показывает точную команду установки." /></td>
+    <td width="50%" valign="top"><img src="https://raw.githubusercontent.com/wesammustafa/Claude-Code-Everything-You-Need-to-Know/main/assets/readme/learn-help-challenge.png" width="380" alt="К шагу 11 приложение даёт только цель и правило урока, а из git status сообщает, что в копии ещё ничего не изменилось." /></td>
   </tr>
   <tr>
     <td><b>Шаг 1 из 12, GUIDED:</b> точная команда и окно для её ввода.</td>
@@ -113,7 +113,7 @@
 
 [Лицензия MIT](LICENSE) · [Участие](CONTRIBUTING.md) · [Журнал изменений](CHANGELOG.md) · [Безопасность](SECURITY.md)
 
-*Маскот: [`assets/brand/claude-jumping.svg`](assets/brand/claude-jumping.svg) взят из [shanraisshan/claude-code-best-practice](https://github.com/shanraisshan/claude-code-best-practice), Copyright (c) 2025-2026 Shayan Rais, используется по [лицензии MIT](https://github.com/shanraisshan/claude-code-best-practice/blob/main/LICENSE).*
+*Маскот: [`assets/brand/claude-jumping.svg`](https://github.com/wesammustafa/Claude-Code-Everything-You-Need-to-Know/blob/main/assets/brand/claude-jumping.svg) взят из [shanraisshan/claude-code-best-practice](https://github.com/shanraisshan/claude-code-best-practice), Copyright (c) 2025-2026 Shayan Rais, используется по [лицензии MIT](https://github.com/shanraisshan/claude-code-best-practice/blob/main/LICENSE).*
 
 <a id="links-from-the-previous-edition"></a><a id="sdlc"></a><a id="what-are-llms-and-how-do-they-differ-from-ai-tools-like-claude-code"></a><a id="what-is-claude-code"></a><a id="claude-code-setup"></a><a id="1-install"></a><a id="2-authenticate"></a><a id="3-run-your-first-prompt"></a><a id="prompt-engineering-deep-dive"></a><a id="1-explore--plan--code--commit"></a><a id="2-test-driven-workflow-write-tests--code--commit"></a><a id="4-optional-generate-a-claudemd"></a><a id="3-visual-iteration-code--screenshot--iterate--commit"></a><a id="claude-opus-46-the-latest-powerhouse"></a><a id="claude-opus-47-the-latest-flagship"></a><a id="the-claude-5-era-todays-model-lineup"></a><a id="effort-levels"></a><a id="4-effort-levels--how-hard-claude-thinks"></a><a id="claude-commands"></a><a id="built-in-slash-commands"></a><a id="day-1-essentials"></a><a id="custom-slash-commands"></a><a id="claude-skills"></a><a id="your-first-skill-in-3-minutes"></a><a id="want-more-depth"></a><a id="what-are-skills"></a><a id="built-in-vs-custom-skills"></a><a id="skills-faq"></a><a id="creating-custom-skills"></a><a id="available-skills-reference"></a><a id="using-skills-in-workflow"></a><a id="troubleshooting-skills"></a><a id="skills-best-practices"></a><a id="hooks"></a><a id="setting-up-claude-hooks"></a><a id="setting-up-hooks"></a><a id="hook-events"></a><a id="hook-input"></a><a id="hook-output"></a><a id="security-considerations"></a><a id="hook-execution-details-and-debugging"></a><a id="execution--debugging"></a><a id="2-general-purpose-subagents--when-one-claude-isnt-enough"></a><a id="3-specialized-subagents--drop-in-role-prompts"></a><a id="ai-agents"></a><a id="running-agents-in-parallel"></a><a id="subagents--running-agents-in-parallel"></a><a id="orchestrating-specialists-from-the-main-session"></a><a id="1-git-worktrees--parallel-branches-parallel-sessions"></a><a id="agent-teams-experimental---2026"></a><a id="agent-teams-experimental"></a><a id="enable-it"></a><a id="the-example-that-justifies-the-cost"></a><a id="staff-a-team-with-the-role-prompts-you-already-have"></a><a id="three-things-that-catch-people-out"></a><a id="monitoring-and-the-naming-trap"></a><a id="best-practices"></a><a id="dynamic-workflows"></a><a id="try-it-in-2-minutes--no-script-required"></a><a id="starting-your-own"></a><a id="beyond-one-terminal--the-2026-automation-surface"></a><a id="model-context-protocol-mcp"></a><a id="the-nm-problem-mcp-solves"></a><a id="three-pillars"></a><a id="the-mcp-registry--self-discovering-agents"></a><a id="the-mcp-ecosystem-today"></a><a id="fast-mode"></a><a id="fast-mode-"></a><a id="beyond-your-own-skills--the-ecosystem"></a><a id="featured-mcp-servers"></a><a id="more-mcp-servers-worth-knowing"></a><a id="super-claude-framework"></a><a id="the-bmad-method--ai-agent-framework"></a><a id="updates--deprecations-february-2026"></a><a id="updates--deprecations"></a><a id="updates--deprecations-as-of-july-2026"></a><a id="faq"></a><a id="references"></a><a id="steal-this-setup"></a><a id="5-bonus-steal-this-repos-setup"></a><a id="-when-to-use-what"></a>
 
